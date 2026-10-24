@@ -1,0 +1,40 @@
+name: Daily ML Pipeline
+
+on:
+  schedule:
+    # 毎週月〜金 15:35 JST（UTC 06:35）
+    - cron: '35 6 * * 1-5'
+  workflow_dispatch:  # 手動実行も可能
+
+jobs:
+  run_pipeline:
+    runs-on: self-hosted
+    timeout-minutes: 90
+
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: データ取得
+        run: docker compose exec -T ml python pipeline/fetch_data.py
+
+      - name: 特徴量計算
+        run: docker compose exec -T ml python pipeline/feature_engineering.py
+
+      - name: 逐次学習
+        run: docker compose exec -T ml python pipeline/train.py --mode incremental
+
+      - name: 予測実行
+        run: docker compose exec -T ml python pipeline/predict.py
+
+      - name: 成功通知
+        if: success()
+        run: |
+          echo "Daily pipeline completed successfully at $(date)"
+
+      - name: 失敗通知
+        if: failure()
+        run: |
+          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-type: application/json' \
+            --data '{"text":"❌ Daily pipeline failed! Check GitHub Actions."}'

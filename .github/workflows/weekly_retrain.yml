@@ -1,0 +1,42 @@
+name: Weekly Full Retrain
+
+on:
+  schedule:
+    # 毎週土曜 深夜1:00 JST（UTC 金曜 16:00）
+    - cron: '0 16 * * 5'
+  workflow_dispatch:
+
+jobs:
+  full_retrain:
+    runs-on: self-hosted
+    timeout-minutes: 360  # 最大6時間
+
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: 全データ取得（過去2年分）
+        run: docker compose exec -T ml python pipeline/fetch_data.py --full
+
+      - name: 特徴量計算
+        run: docker compose exec -T ml python pipeline/feature_engineering.py
+
+      - name: フル再学習
+        run: docker compose exec -T ml python pipeline/train.py --mode full
+
+      - name: バックテスト・精度評価
+        run: docker compose exec -T ml python pipeline/backtest.py
+
+      - name: 成功通知
+        if: success()
+        run: |
+          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-type: application/json' \
+            --data '{"text":"✅ Weekly retrain completed!"}'
+
+      - name: 失敗通知
+        if: failure()
+        run: |
+          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-type: application/json' \
+            --data '{"text":"❌ Weekly retrain failed! Manual check required."}'
