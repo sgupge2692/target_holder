@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.routers import auth, billing, signals, stocks
+
 app = FastAPI(
     title="Stock Intelligence API",
     description="株価予測・企業要約サービスのAPI",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -14,6 +16,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth.router)
+app.include_router(billing.router)
+app.include_router(signals.router)
+app.include_router(stocks.router)
 
 
 @app.get("/health")
