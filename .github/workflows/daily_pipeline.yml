@@ -27,6 +27,9 @@ jobs:
       - name: 予測実行
         run: docker compose exec -T ml python pipeline/predict.py
 
+      - name: 前日実績記録
+        run: docker compose exec -T ml python pipeline/backtest.py
+
       - name: 成功通知
         if: success()
         run: |
