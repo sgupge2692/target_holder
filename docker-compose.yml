@@ -2,7 +2,7 @@ version: '3.9'
 
 services:
   db:
-    image: timescaledb/timescaledb:latest-pg16
+    image: timescale/timescaledb:latest-pg16
     container_name: stock_db
     environment:
       POSTGRES_USER: ${DB_USER}
