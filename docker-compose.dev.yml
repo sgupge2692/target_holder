@@ -1,16 +1,20 @@
-version: '3.9'
-
 services:
   backend:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
-      ENV: development
+      ENV:   development
       DEBUG: "true"
+    volumes:
+      - ./backend:/app  # hot reload用マウント
 
   frontend:
     command: npm run dev
     environment:
-      NODE_ENV: development
+      NODE_ENV:               development
+      NEXT_PUBLIC_API_URL:    http://localhost:8000
 
   ml:
+    # 開発時は起動したままにして手動でコマンド実行
     command: tail -f /dev/null
+    environment:
+      ENV: development
