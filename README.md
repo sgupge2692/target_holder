@@ -33,6 +33,23 @@ curl http://localhost:8000/health
 - バックエンドAPI: http://localhost:8000
 - API docs: http://localhost:8000/docs
 
+## J-Quants API接続テスト
+
+APIキーが正しく設定されているか確認する:
+
+```bash
+# .envにAPIキーを記入してから
+docker compose exec ml python pipeline/test_api_connection.py
+```
+
+テスト内容:
+1. APIキーが設定されているか
+2. 銘柄一覧エンドポイント (`/v2/equities/master`) が叩けるか
+3. 日足データ (`/v2/equities/bars/daily`) が取得できるか（トヨタ自動車で確認）
+4. v2形式の列名 (O/H/L/C/Vo) が返ってくるか
+
+APIキーは https://jpx-jquants.com/ で登録後に発行できる。
+
 ## MLパイプラインの手動実行
 
 ```bash
