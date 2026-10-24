@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = ""
     stripe_price_id_pro: str = ""  # Stripe の Price ID（有料プラン）
 
+    openai_api_key: str = ""
+
     class Config:
         env_file = ".env"
         extra = "ignore"

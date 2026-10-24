@@ -1,12 +1,14 @@
 "use client";
 import { useParams } from "next/navigation";
+import { useState, useEffect } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { getStock, getQuotes, getSignalHistory } from "@/lib/api";
+import { getStock, getQuotes, getSignalHistory, getSummary, generateSummary, regenerateSummary, type Summary } from "@/lib/api";
 import { SignalBadge } from "@/components/SignalBadge";
+import { SummaryCard } from "@/components/SummaryCard";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Lock } from "lucide-react";
 
@@ -14,9 +16,32 @@ export default function StockPage() {
   const { code } = useParams<{ code: string }>();
   const { user } = useAuth();
 
+  const [summary, setSummary]     = useState<Summary | null>(null);
+  const [sumLoading, setSumLoad]  = useState(false);
+
   const { data: stock }   = useSWR(`stock:${code}`,   () => getStock(code));
   const { data: quotes }  = useSWR(user ? `quotes:${code}` : null, () => getQuotes(code));
   const { data: history } = useSWR(user ? `hist:${code}` : null, () => getSignalHistory(code));
+
+  // 要約を初回ロード（404 は無視）
+  useEffect(() => {
+    if (!user) return;
+    getSummary(code).then(setSummary).catch(() => {});
+  }, [code, user]);
+
+  const handleGenerate = async (text: string, yearLabel: string) => {
+    setSumLoad(true);
+    try { setSummary(await generateSummary(code, text, yearLabel)); }
+    catch (e: unknown) { alert(e instanceof Error ? e.message : "エラー"); }
+    finally { setSumLoad(false); }
+  };
+
+  const handleRegenerate = async (text: string, yearLabel: string) => {
+    setSumLoad(true);
+    try { setSummary(await regenerateSummary(code, text, yearLabel)); }
+    catch (e: unknown) { alert(e instanceof Error ? e.message : "エラー"); }
+    finally { setSumLoad(false); }
+  };
 
   const chartData = (quotes?.quotes ?? [])
     .slice().reverse()
@@ -69,6 +94,18 @@ export default function StockPage() {
           <p className="text-center text-gray-400 py-12">データなし</p>
         )}
       </div>
+
+      {/* 四季報 LLM 要約 */}
+      {user && (
+        <SummaryCard
+          code={code}
+          isPro={user.plan === "pro"}
+          summary={summary}
+          loading={sumLoading}
+          onGenerate={handleGenerate}
+          onRegenerate={handleRegenerate}
+        />
+      )}
 
       {/* シグナル履歴 */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 p-5">

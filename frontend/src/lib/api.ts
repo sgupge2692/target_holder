@@ -87,3 +87,26 @@ export const getQuotes = (code: string) =>
   apiFetch<{ code: string; quotes: Quote[]; plan: string }>(
     `/api/stocks/${code}/quotes`
   );
+
+// ── 四季報要約 ────────────────────────────────────────────────
+
+export interface Summary {
+  code: string; year_label: string; plan: string;
+  overview: string | null; performance: string | null; risks: string | null;
+  model: string | null; created_at: string;
+}
+
+export const getSummary = (code: string) =>
+  apiFetch<Summary>(`/api/summary/${code}`);
+
+export const generateSummary = (code: string, text: string, year_label: string) =>
+  apiFetch<Summary>(`/api/summary/${code}`, {
+    method: "POST",
+    body: JSON.stringify({ text, year_label }),
+  });
+
+export const regenerateSummary = (code: string, text: string, year_label: string) =>
+  apiFetch<Summary>(`/api/summary/${code}/regenerate`, {
+    method: "POST",
+    body: JSON.stringify({ text, year_label }),
+  });
