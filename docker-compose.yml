@@ -74,6 +74,9 @@ services:
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       JQUANTS_API_KEY: ${JQUANTS_API_KEY}
+      JQUANTS_MAIL_ADDRESS: ${JQUANTS_MAIL_ADDRESS}
+      JQUANTS_PASSWORD: ${JQUANTS_PASSWORD}
+      JQUANTS_REFRESH_TOKEN: ${JQUANTS_REFRESH_TOKEN}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ENV: ${ENV:-development}
     volumes:
