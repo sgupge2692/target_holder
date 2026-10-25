@@ -20,6 +20,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgresql+asyncpg://", "postgresql://")
 BASE_URL = "https://api.jquants.com/v2"
+AUTH_URL = "https://api.jquants.com/v1"  # 認証エンドポイントは v1
 
 # J-Quants 認証
 JQUANTS_REFRESH_TOKEN = os.getenv("JQUANTS_REFRESH_TOKEN", "")
@@ -56,7 +57,7 @@ def get_id_token() -> str:
     # リフレッシュトークンが直接設定されている場合
     if JQUANTS_REFRESH_TOKEN:
         resp = requests.post(
-            f"{BASE_URL}/token/auth_refresh",
+            f"{AUTH_URL}/token/auth_refresh",
             params={"refreshtoken": JQUANTS_REFRESH_TOKEN},
         )
         resp.raise_for_status()
@@ -65,13 +66,13 @@ def get_id_token() -> str:
     # メール/パスワードから取得
     if JQUANTS_MAIL_ADDRESS and JQUANTS_PASSWORD:
         resp = requests.post(
-            f"{BASE_URL}/token/auth_user",
+            f"{AUTH_URL}/token/auth_user",
             json={"mailaddress": JQUANTS_MAIL_ADDRESS, "password": JQUANTS_PASSWORD},
         )
         resp.raise_for_status()
         refresh_token = resp.json()["refreshToken"]
         resp2 = requests.post(
-            f"{BASE_URL}/token/auth_refresh",
+            f"{AUTH_URL}/token/auth_refresh",
             params={"refreshtoken": refresh_token},
         )
         resp2.raise_for_status()
