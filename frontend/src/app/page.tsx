@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { getLatestSignals, getAccuracy, type Signal, type AccuracyRow } from "@/lib/api";
@@ -7,9 +7,109 @@ import { SignalBadge } from "@/components/SignalBadge";
 import { StockSearch } from "@/components/StockSearch";
 import { AccuracyChart } from "@/components/AccuracyChart";
 import { useAuth } from "@/hooks/useAuth";
-import { Lock } from "lucide-react";
+import { Lock, ChevronDown, ChevronRight, Lightbulb } from "lucide-react";
 
 type Tab = "ALL" | "UP" | "DOWN";
+
+function ExplanationRow({ s }: { s: Signal }) {
+  const [open, setOpen] = useState(false);
+
+  const keyFactors: string[] = (() => {
+    try { return s.key_factors ? JSON.parse(s.key_factors) : []; }
+    catch { return []; }
+  })();
+
+  if (!s.explanation) return null;
+
+  return (
+    <>
+      <tr className="hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors">
+        <td className="px-4 py-3">
+          <Link href={`/stocks/${s.Code}`} className="font-medium hover:text-brand-600 transition-colors">
+            {s.company_name ?? s.Code}
+          </Link>
+          <div className="text-xs text-gray-400">{s.Code}</div>
+        </td>
+        <td className="px-4 py-3 text-gray-500 dark:text-slate-400">{s.Date}</td>
+        <td className="px-4 py-3 text-center"><SignalBadge signal={s.signal} /></td>
+        <td className="px-4 py-3 text-right font-mono">
+          {(s.up_probability * 100).toFixed(1)}%
+        </td>
+        <td className="px-4 py-3 text-right font-mono">
+          {s.actual_return != null
+            ? <span className={s.actual_return >= 0 ? "text-emerald-600" : "text-red-500"}>
+                {s.actual_return >= 0 ? "+" : ""}{(s.actual_return * 100).toFixed(2)}%
+              </span>
+            : <span className="text-gray-300">—</span>
+          }
+        </td>
+        <td className="px-4 py-3 text-center">
+          {s.is_correct == null ? "—" : s.is_correct ? "✅" : "❌"}
+        </td>
+        <td className="px-4 py-3 text-center">
+          <button
+            onClick={() => setOpen(v => !v)}
+            className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+          >
+            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            理由
+          </button>
+        </td>
+      </tr>
+      {open && (
+        <tr className="bg-indigo-50/60 dark:bg-indigo-900/20">
+          <td colSpan={7} className="px-6 py-3">
+            <div className="flex items-start gap-2 text-sm text-indigo-900 dark:text-indigo-200">
+              <Lightbulb size={16} className="mt-0.5 shrink-0 text-indigo-500" />
+              <div>
+                <p className="font-medium mb-1">{s.explanation}</p>
+                {keyFactors.length > 0 && (
+                  <ul className="flex flex-wrap gap-2 mt-1">
+                    {keyFactors.map((f, i) => (
+                      <li key={i} className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-800 text-xs text-indigo-700 dark:text-indigo-300">
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function PlainRow({ s }: { s: Signal }) {
+  return (
+    <tr className="hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors">
+      <td className="px-4 py-3">
+        <Link href={`/stocks/${s.Code}`} className="font-medium hover:text-brand-600 transition-colors">
+          {s.company_name ?? s.Code}
+        </Link>
+        <div className="text-xs text-gray-400">{s.Code}</div>
+      </td>
+      <td className="px-4 py-3 text-gray-500 dark:text-slate-400">{s.Date}</td>
+      <td className="px-4 py-3 text-center"><SignalBadge signal={s.signal} /></td>
+      <td className="px-4 py-3 text-right font-mono">
+        {(s.up_probability * 100).toFixed(1)}%
+      </td>
+      <td className="px-4 py-3 text-right font-mono">
+        {s.actual_return != null
+          ? <span className={s.actual_return >= 0 ? "text-emerald-600" : "text-red-500"}>
+              {s.actual_return >= 0 ? "+" : ""}{(s.actual_return * 100).toFixed(2)}%
+            </span>
+          : <span className="text-gray-300">—</span>
+        }
+      </td>
+      <td className="px-4 py-3 text-center">
+        {s.is_correct == null ? "—" : s.is_correct ? "✅" : "❌"}
+      </td>
+      <td className="px-4 py-3" />
+    </tr>
+  );
+}
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -23,7 +123,6 @@ export default function HomePage() {
 
   const { data: accData } = useSWR("accuracy", getAccuracy, { revalidateOnFocus: false });
 
-  // 月別精度データを整形（/api/signals/accuracy はシグナル別集計のみなのでフロントでモック）
   const accuracyRows: AccuracyRow[] = accData?.accuracy ?? [];
   const upRow   = accuracyRows.find(r => r.signal === "UP");
   const downRow = accuracyRows.find(r => r.signal === "DOWN");
@@ -118,36 +217,15 @@ export default function HomePage() {
                       <th className="px-4 py-3 text-right">確率</th>
                       <th className="px-4 py-3 text-right">実績リターン</th>
                       <th className="px-4 py-3 text-center">的中</th>
+                      <th className="px-4 py-3 text-center">AI説明</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                    {(signalData?.signals ?? []).map((s: Signal) => (
-                      <tr key={`${s.Code}-${s.Date}`} className="hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors">
-                        <td className="px-4 py-3">
-                          <Link href={`/stocks/${s.Code}`} className="font-medium hover:text-brand-600 transition-colors">
-                            {s.company_name ?? s.Code}
-                          </Link>
-                          <div className="text-xs text-gray-400">{s.Code}</div>
-                        </td>
-                        <td className="px-4 py-3 text-gray-500 dark:text-slate-400">{s.Date}</td>
-                        <td className="px-4 py-3 text-center"><SignalBadge signal={s.signal} /></td>
-                        <td className="px-4 py-3 text-right font-mono">
-                          {(s.up_probability * 100).toFixed(1)}%
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono">
-                          {s.actual_return != null
-                            ? <span className={s.actual_return >= 0 ? "text-emerald-600" : "text-red-500"}>
-                                {s.actual_return >= 0 ? "+" : ""}{(s.actual_return * 100).toFixed(2)}%
-                              </span>
-                            : <span className="text-gray-300">—</span>
-                          }
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {s.is_correct == null ? "—"
-                            : s.is_correct ? "✅" : "❌"}
-                        </td>
-                      </tr>
-                    ))}
+                    {(signalData?.signals ?? []).map((s: Signal) =>
+                      s.explanation
+                        ? <ExplanationRow key={`${s.Code}-${s.Date}`} s={s} />
+                        : <PlainRow key={`${s.Code}-${s.Date}`} s={s} />
+                    )}
                   </tbody>
                 </table>
                 {(signalData?.signals ?? []).length === 0 && (

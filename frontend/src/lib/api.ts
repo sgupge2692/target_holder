@@ -54,6 +54,7 @@ export interface Signal {
   Code: string; Date: string; signal: "UP" | "DOWN";
   up_probability: number; actual_return: number | null;
   is_correct: boolean | null; company_name: string | null;
+  explanation: string | null; key_factors: string | null;
 }
 export interface AccuracyRow {
   signal: string; total: number; correct: number;

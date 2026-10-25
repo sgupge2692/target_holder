@@ -38,6 +38,7 @@ async def get_latest_signals(
         SELECT DISTINCT ON (p."Code")
                p."Code", p."Date", p.signal, p.up_probability,
                p.actual_return, p.is_correct,
+               p.explanation, p.key_factors,
                s.company_name
         FROM predictions p
         LEFT JOIN listed_stocks s ON s.code = p."Code"
@@ -60,7 +61,8 @@ async def get_signal_history(
     limit = 9999 if is_pro else 5  # 無料は直近5件
 
     rows = await db.execute(text("""
-        SELECT "Code", "Date", signal, up_probability, actual_return, is_correct, predicted_at
+        SELECT "Code", "Date", signal, up_probability, actual_return, is_correct,
+               explanation, key_factors, predicted_at
         FROM predictions
         WHERE "Code" = :code
         ORDER BY "Date" DESC
