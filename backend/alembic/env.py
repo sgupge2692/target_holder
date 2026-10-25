@@ -7,8 +7,9 @@ from alembic import context
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from app.database import Base
-from app.models import User  # noqa: F401
+# Base だけを import（database.py の async engine を起動しない）
+from app.base import Base
+from app.models import User  # noqa: F401 – テーブル登録
 
 config = context.config
 if config.config_file_name is not None:
@@ -18,9 +19,11 @@ target_metadata = Base.metadata
 
 
 def get_sync_url() -> str:
-    """asyncpg URL を psycopg2 URL に変換（Alembic は sync ドライバが必要）"""
+    """asyncpg URL を psycopg2 URL に変換"""
     url = config.get_main_option("sqlalchemy.url") or ""
-    return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+    return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://").replace(
+        "postgresql://", "postgresql+psycopg2://"
+    )
 
 
 def run_migrations_offline() -> None:
