@@ -88,6 +88,18 @@ async def create_portal_session(
     return PortalResponse(url=session.url)
 
 
+@router.get("/subscription")
+async def get_subscription(
+    current_user: User = Depends(get_current_user),
+):
+    """現在のサブスクリプション情報を返す"""
+    return {
+        "plan": current_user.plan,
+        "plan_expires_at": current_user.plan_expires_at.isoformat() if current_user.plan_expires_at else None,
+        "stripe_subscription_id": current_user.stripe_subscription_id,
+    }
+
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     """

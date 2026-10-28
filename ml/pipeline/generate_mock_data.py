@@ -1,40 +1,57 @@
 """
 モックデータ生成スクリプト（J-Quants が使えない間の開発・テスト用）
 主要20銘柄の日足データを乱数で生成してDBに保存する
+
+v3 対応:
+  - listed_stocks に sector_code を追加（セクター相対特徴量に必要）
+  - feature_engineering.py が listed_stocks を JOIN して sector_code を取得
 """
 import os
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgresql+asyncpg://", "postgresql://")
 
+# (code, name, sector_code)
+# sector_code は 33業種分類コードの簡略版
 MOCK_STOCKS = [
-    ("72030", "トヨタ自動車"),
-    ("67580", "ソニーグループ"),
-    ("99840", "ソフトバンクグループ"),
-    ("83060", "三菱UFJフィナンシャル"),
-    ("68610", "キーエンス"),
-    ("40630", "信越化学工業"),
-    ("80350", "東京エレクトロン"),
-    ("69540", "ファナック"),
-    ("79740", "任天堂"),
-    ("94320", "NTT"),
-    ("94330", "KDDI"),
-    ("45190", "中外製薬"),
-    ("60980", "リクルートホールディングス"),
-    ("45430", "テルモ"),
-    ("77510", "キヤノン"),
-    ("63670", "ダイキン工業"),
-    ("80580", "三菱商事"),
-    ("51080", "ブリヂストン"),
-    ("43450", "シスメックス"),
-    ("96830", "NTTドコモ"),
+    ("72030", "トヨタ自動車",           "3700"),   # 輸送用機器
+    ("67580", "ソニーグループ",           "3650"),   # 電気機器
+    ("99840", "ソフトバンクグループ",     "5250"),   # 情報・通信
+    ("83060", "三菱UFJフィナンシャル",    "7050"),   # 銀行
+    ("68610", "キーエンス",               "3650"),   # 電気機器
+    ("40630", "信越化学工業",             "3150"),   # 化学
+    ("80350", "東京エレクトロン",         "3650"),   # 電気機器
+    ("69540", "ファナック",               "3650"),   # 電気機器
+    ("79740", "任天堂",                   "3650"),   # 電気機器
+    ("94320", "NTT",                     "5250"),   # 情報・通信
+    ("94330", "KDDI",                    "5250"),   # 情報・通信
+    ("45190", "中外製薬",                 "3250"),   # 医薬品
+    ("60980", "リクルートホールディングス","6050"),   # サービス
+    ("45430", "テルモ",                   "3450"),   # 精密機器
+    ("77510", "キヤノン",                 "3650"),   # 電気機器
+    ("63670", "ダイキン工業",             "3550"),   # 機械
+    ("80580", "三菱商事",                 "6150"),   # 卸売
+    ("51080", "ブリヂストン",             "3550"),   # ゴム製品 → 機械で代用
+    ("43450", "シスメックス",             "3450"),   # 精密機器
+    ("96830", "NTTドコモ",               "5250"),   # 情報・通信
 ]
+
+def generate_listed_stocks(engine) -> None:
+    """listed_stocks テーブルにモック銘柄情報（sector_code含む）を挿入"""
+    rows = [
+        {"code": code, "company_name": name, "sector_code": sector}
+        for code, name, sector in MOCK_STOCKS
+    ]
+    df = pd.DataFrame(rows)
+    df.to_sql("listed_stocks", engine, if_exists="replace", index=False)
+    print(f"listed_stocks に {len(df)} 件保存（sector_code付き）")
+
 
 def generate_quotes(code: str, name: str, days: int = 90) -> pd.DataFrame:
     """ランダムウォークで日足データ生成"""
@@ -74,8 +91,11 @@ def generate_quotes(code: str, name: str, days: int = 90) -> pd.DataFrame:
 def main():
     engine = create_engine(DATABASE_URL)
 
+    # listed_stocks（sector_code 含む）を先に保存
+    generate_listed_stocks(engine)
+
     all_quotes = []
-    for code, name in MOCK_STOCKS:
+    for code, name, _sector in MOCK_STOCKS:
         df = generate_quotes(code, name, days=180)
         all_quotes.append(df)
         print(f"Generated {len(df)} rows for {code} {name}")

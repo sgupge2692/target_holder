@@ -1,27 +1,54 @@
 "use client";
 import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import Link from "next/link";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { getStock, getQuotes, getSignalHistory, getSummary, generateSummary, regenerateSummary, type Summary } from "@/lib/api";
+import {
+  getStock, getQuotes, getSignalHistory, getSummary, generateSummary, regenerateSummary,
+  getWatchlistStatus, addToWatchlist, removeFromWatchlist, type Summary,
+} from "@/lib/api";
 import { SignalBadge } from "@/components/SignalBadge";
 import { SummaryCard } from "@/components/SummaryCard";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, Lock, Star } from "lucide-react";
 
 export default function StockPage() {
   const { code } = useParams<{ code: string }>();
   const { user } = useAuth();
 
-  const [summary, setSummary]     = useState<Summary | null>(null);
-  const [sumLoading, setSumLoad]  = useState(false);
+  const [summary, setSummary]      = useState<Summary | null>(null);
+  const [sumLoading, setSumLoad]   = useState(false);
+  const [watchLoading, setWatchLd] = useState(false);
 
   const { data: stock }   = useSWR(`stock:${code}`,   () => getStock(code));
   const { data: quotes }  = useSWR(user ? `quotes:${code}` : null, () => getQuotes(code));
   const { data: history } = useSWR(user ? `hist:${code}` : null, () => getSignalHistory(code));
+  const { data: watchStatus, mutate: mutateWatch } = useSWR(
+    user ? `watch:${code}` : null,
+    () => getWatchlistStatus(code),
+  );
+  const watched = watchStatus?.watched ?? false;
+
+  const toggleWatch = async () => {
+    if (!user) return;
+    setWatchLd(true);
+    try {
+      if (watched) {
+        await removeFromWatchlist(code);
+      } else {
+        await addToWatchlist(code);
+      }
+      mutateWatch();
+      mutate("watchlist");  // ウォッチリストページのキャッシュも更新
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "エラーが発生しました");
+    } finally {
+      setWatchLd(false);
+    }
+  };
 
   // 要約を初回ロード（404 は無視）
   useEffect(() => {
@@ -57,11 +84,28 @@ export default function StockPage() {
           <h1 className="text-xl font-bold">{stock?.company_name ?? code}</h1>
           <p className="text-sm text-gray-400">{code} · {stock?.market_code}</p>
         </div>
-        {user && quotes?.plan === "free" && (
-          <Link href="/billing" className="ml-auto text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors">
-            Pro で全期間表示
-          </Link>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {user && (
+            <button
+              onClick={toggleWatch}
+              disabled={watchLoading}
+              title={watched ? "ウォッチリストから削除" : "ウォッチリストに追加"}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all disabled:opacity-50 ${
+                watched
+                  ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 border-amber-300 dark:border-amber-700 hover:bg-amber-200"
+                  : "bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:bg-gray-200 dark:hover:bg-slate-700"
+              }`}
+            >
+              <Star size={12} className={watched ? "fill-amber-500 text-amber-500" : ""} />
+              {watched ? "ウォッチ中" : "ウォッチ"}
+            </button>
+          )}
+          {user && quotes?.plan === "free" && (
+            <Link href="/billing" className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors">
+              Pro で全期間表示
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* チャート */}

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { register, login } from "@/lib/api";
 import { TrendingUp } from "lucide-react";
 
@@ -78,6 +79,13 @@ export default function AuthPage() {
               {mode === "login" ? "新規登録" : "ログイン"}
             </button>
           </p>
+          {mode === "login" && (
+            <p className="text-center text-xs text-gray-400 dark:text-slate-500">
+              <Link href="/auth/reset-password" className="hover:text-brand-600 hover:underline">
+                パスワードをお忘れですか？
+              </Link>
+            </p>
+          )}
         </form>
       </div>
     </div>

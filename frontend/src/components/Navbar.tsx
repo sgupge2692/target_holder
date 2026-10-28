@@ -2,11 +2,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { TrendingUp, Moon, Sun } from "lucide-react";
+import { TrendingUp, Moon, Sun, Bookmark } from "lucide-react";
 
 export function Navbar() {
   const { user, loading, signOut } = useAuth();
   const [dark, setDark] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
   // ダークモード初期化
   useEffect(() => {
@@ -17,6 +18,13 @@ export function Navbar() {
     document.documentElement.classList.toggle("dark", isDark);
   }, []);
 
+  // スクロール検知（LP ヒーロー通過後に背景を強調）
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 60);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   const toggleDark = () => {
     const next = !dark;
     setDark(next);
@@ -25,7 +33,11 @@ export function Navbar() {
   };
 
   return (
-    <nav className="border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+    <nav className={`sticky top-0 z-50 border-b transition-shadow ${
+      scrolled
+        ? "border-gray-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur shadow-sm"
+        : "border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+    }`}>
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 font-bold text-lg text-brand-600 dark:text-brand-500">
           <TrendingUp size={20} />
@@ -33,8 +45,22 @@ export function Navbar() {
         </Link>
 
         <div className="flex items-center gap-4 text-sm">
-          <Link href="/" className="hover:text-brand-600 dark:hover:text-brand-500 transition-colors">シグナル</Link>
-          <Link href="/account" className="hover:text-brand-600 dark:hover:text-brand-500 transition-colors">アカウント</Link>
+          {user ? (
+            <>
+              <Link href="/" className="hover:text-brand-600 dark:hover:text-brand-500 transition-colors">シグナル</Link>
+              <Link href="/backtest" className="hidden sm:block hover:text-brand-600 dark:hover:text-brand-500 transition-colors">バックテスト</Link>
+              <Link href="/watchlist" className="flex items-center gap-1 hover:text-brand-600 dark:hover:text-brand-500 transition-colors">
+                <Bookmark size={14} />
+                <span className="hidden sm:inline">ウォッチ</span>
+              </Link>
+              <Link href="/account" className="hover:text-brand-600 dark:hover:text-brand-500 transition-colors">アカウント</Link>
+            </>
+          ) : (
+            <>
+              <Link href="/backtest" className="hidden sm:block hover:text-brand-600 dark:hover:text-brand-500 transition-colors">バックテスト</Link>
+              <Link href="/#pricing" className="hidden sm:block hover:text-brand-600 dark:hover:text-brand-500 transition-colors">料金プラン</Link>
+            </>
+          )}
 
           <button onClick={toggleDark} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
             {dark ? <Sun size={16} /> : <Moon size={16} />}
@@ -58,12 +84,20 @@ export function Navbar() {
                 </button>
               </div>
             ) : (
-              <Link
-                href="/auth"
-                className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
-              >
-                ログイン
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/auth"
+                  className="text-gray-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+                >
+                  ログイン
+                </Link>
+                <Link
+                  href="/auth"
+                  className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-1.5 rounded-lg font-medium transition-colors"
+                >
+                  無料で始める
+                </Link>
+              </div>
             )
           )}
         </div>

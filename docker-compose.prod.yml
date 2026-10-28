@@ -1,32 +1,167 @@
 version: '3.9'
 
+# 本番用オーバーライド: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# または make prod-up (Makefile 参照)
+
 services:
+  db:
+    restart: unless-stopped
+    # 本番では外部ポートを閉じる（nginx 経由のみ）
+    ports: []
+
+  redis:
+    restart: unless-stopped
+    ports: []
+    # 最大メモリ制限 + LRU 退避ポリシー
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   backend:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-    restart: always
+    restart: unless-stopped
+    # 開発用ボリュームマウントを外す
+    volumes:
+      - ml_models:/app/models:ro
+    ports: []
+    env_file:
+      - .env
     environment:
       ENV: production
       DEBUG: "false"
+      CORS_ORIGINS: "${CORS_ORIGINS}"
+      SENTRY_DSN: "${SENTRY_DSN:-}"
+      RELEASE: "${RELEASE:-unknown}"
+      EMAIL_PROVIDER: "${EMAIL_PROVIDER:-smtp}"
+      EMAIL_FROM: "${EMAIL_FROM}"
+      EMAIL_FROM_NAME: "${EMAIL_FROM_NAME:-Stock Intelligence}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SENDGRID_API_KEY: "${SENDGRID_API_KEY:-}"
+      ADMIN_EMAILS: "${ADMIN_EMAILS:-}"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   frontend:
-    command: npm run start
-    restart: always
+    restart: unless-stopped
+    volumes: []
+    ports: []
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
+      NEXT_PUBLIC_API_URL: "http://backend:8000"
+      NEXT_PUBLIC_SITE_URL: "${NEXT_PUBLIC_SITE_URL}"
+      NEXT_PUBLIC_SENTRY_DSN: "${NEXT_PUBLIC_SENTRY_DSN:-}"
+      NEXT_PUBLIC_RELEASE: "${RELEASE:-unknown}"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   ml:
     restart: unless-stopped
+    volumes:
+      - ml_models:/app/models
+    ports: []
+    env_file:
+      - .env
+    environment:
+      ENV: production
+      NEWS_SENTIMENT: "${NEWS_SENTIMENT:-false}"
+      NEWS_USE_LLM: "${NEWS_USE_LLM:-false}"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
+  # ── cron ワーカー（ML スクリプト & メール通知）────────────────────────
+  cron:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    container_name: stock_cron
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo '45 18 * * 1-5 cd /app && python /scripts/send_daily_signals.py >> /var/log/send_signals.log 2>&1' >> /etc/crontabs/root &&
+        echo '50 18 * * 1-5 cd /app && python /scripts/post_twitter.py >> /var/log/post_twitter.log 2>&1' >> /etc/crontabs/root &&
+        echo '0  6  * * 1-5 cd /app && python pipeline/fetch_data.py >> /var/log/fetch_data.log 2>&1' >> /etc/crontabs/root &&
+        echo '30 6  * * 1-5 cd /app && python pipeline/train.py >> /var/log/train.log 2>&1' >> /etc/crontabs/root &&
+        echo '0  8  * * 1-5 cd /app && python pipeline/predict.py >> /var/log/predict.log 2>&1' >> /etc/crontabs/root &&
+        crond -f -l 6
+      "
+    volumes:
+      - ml_models:/app/models
+      - ./scripts:/scripts:ro
+      - cron_logs:/var/log
+    env_file:
+      - .env
+    environment:
+      ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ── Nginx リバースプロキシ ──────────────────────────────────────────
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: stock_nginx
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
     depends_on:
       - backend
       - frontend
-    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Let's Encrypt 証明書自動更新 ────────────────────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    container_name: stock_certbot
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    # 12時間ごとに更新チェック
+    entrypoint: >
+      sh -c "trap exit TERM;
+             while :; do
+               certbot renew --webroot -w /var/www/certbot --quiet;
+               sleep 12h & wait $${!};
+             done"
+
+volumes:
+  db_data:
+  redis_data:
+  ml_models:
+  cron_logs:
+  certbot_www:
+  certbot_conf:

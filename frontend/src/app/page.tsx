@@ -2,14 +2,42 @@
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { getLatestSignals, getAccuracy, type Signal, type AccuracyRow } from "@/lib/api";
+import { getLatestSignals, getAccuracy, downloadSignalsCsv, type Signal, type AccuracyRow } from "@/lib/api";
 import { SignalBadge } from "@/components/SignalBadge";
 import { StockSearch } from "@/components/StockSearch";
-import { AccuracyChart } from "@/components/AccuracyChart";
+import { LandingPage } from "@/components/LandingPage";
 import { useAuth } from "@/hooks/useAuth";
-import { Lock, ChevronDown, ChevronRight, Lightbulb } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Lightbulb, SlidersHorizontal } from "lucide-react";
 
 type Tab = "ALL" | "UP" | "DOWN";
+
+// ── 確度フィルタースライダー ─────────────────────────────────────────────
+function ProbabilityFilter({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <SlidersHorizontal size={15} className="text-gray-400 shrink-0" />
+      <span className="text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap">確度 ≥</span>
+      <input
+        type="range"
+        min={50}
+        max={95}
+        step={5}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        className="w-28 accent-indigo-500"
+      />
+      <span className="text-xs font-mono font-semibold w-10 text-indigo-600 dark:text-indigo-400">
+        {value}%
+      </span>
+    </div>
+  );
+}
 
 function ExplanationRow({ s }: { s: Signal }) {
   const [open, setOpen] = useState(false);
@@ -112,8 +140,26 @@ function PlainRow({ s }: { s: Signal }) {
 }
 
 export default function HomePage() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [tab, setTab] = useState<Tab>("ALL");
+  const [minProb, setMinProb] = useState(60);
+  const [csvLoading, setCsvLoading] = useState(false);
+
+  const handleCsvDownload = async () => {
+    setCsvLoading(true);
+    try {
+      await downloadSignalsCsv(tab === "ALL" ? undefined : tab, 30);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "CSVダウンロードに失敗しました");
+    } finally {
+      setCsvLoading(false);
+    }
+  };
+
+  // 未ログイン時はランディングページを表示
+  if (!loading && !user) {
+    return <LandingPage />;
+  }
 
   const { data: signalData, isLoading: sigLoading } = useSWR(
     user ? ["signals", tab] : null,
@@ -159,81 +205,85 @@ export default function HomePage() {
       )}
 
       {/* シグナルテーブル */}
-      {!user ? (
-        <div className="rounded-xl border border-dashed border-gray-300 dark:border-slate-600 p-12 text-center">
-          <Lock size={32} className="mx-auto mb-3 text-gray-400" />
-          <p className="font-medium mb-2">ログインするとシグナルを閲覧できます</p>
-          <Link
-            href="/auth"
-            className="inline-block mt-2 bg-brand-600 hover:bg-brand-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+      {/* タブ + フィルター */}
+      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg w-fit">
+        {(["ALL", "UP", "DOWN"] as Tab[]).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              tab === t
+                ? "bg-white dark:bg-slate-700 shadow-sm"
+                : "text-gray-500 hover:text-gray-700 dark:text-slate-400"
+            }`}
           >
-            無料で始める
-          </Link>
-        </div>
+            {t}
+          </button>
+        ))}
+      </div>
+      <ProbabilityFilter value={minProb} onChange={setMinProb} />
+      {user?.plan === "pro" && (
+        <button
+          onClick={handleCsvDownload}
+          disabled={csvLoading}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+        >
+          <Download size={13} />
+          {csvLoading ? "ダウンロード中..." : "CSV"}
+        </button>
+      )}
+      </div>
+
+      {sigLoading ? (
+        <div className="text-center py-12 text-gray-400">読み込み中...</div>
       ) : (
         <>
-          {/* タブ */}
-          <div className="flex gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg w-fit">
-            {(["ALL", "UP", "DOWN"] as Tab[]).map(t => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  tab === t
-                    ? "bg-white dark:bg-slate-700 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700 dark:text-slate-400"
-                }`}
+          {user && user.plan === "free" && (
+            <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 px-4 py-3 text-sm">
+              <span className="text-amber-800 dark:text-amber-300">
+                無料プランは上位 10 件まで。Pro プランで全件表示。
+              </span>
+              <Link
+                href="/billing"
+                className="ml-4 shrink-0 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-md font-medium transition-colors"
               >
-                {t}
-              </button>
-            ))}
-          </div>
-
-          {sigLoading ? (
-            <div className="text-center py-12 text-gray-400">読み込み中...</div>
-          ) : (
-            <>
-              {user.plan === "free" && (
-                <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 px-4 py-3 text-sm">
-                  <span className="text-amber-800 dark:text-amber-300">
-                    無料プランは上位 10 件まで。Pro プランで全件表示。
-                  </span>
-                  <Link
-                    href="/billing"
-                    className="ml-4 shrink-0 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-md font-medium transition-colors"
-                  >
-                    アップグレード
-                  </Link>
-                </div>
-              )}
-
-              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-700">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 dark:bg-slate-800 text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-                    <tr>
-                      <th className="px-4 py-3 text-left">銘柄</th>
-                      <th className="px-4 py-3 text-left">シグナル日</th>
-                      <th className="px-4 py-3 text-center">シグナル</th>
-                      <th className="px-4 py-3 text-right">確率</th>
-                      <th className="px-4 py-3 text-right">実績リターン</th>
-                      <th className="px-4 py-3 text-center">的中</th>
-                      <th className="px-4 py-3 text-center">AI説明</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                    {(signalData?.signals ?? []).map((s: Signal) =>
-                      s.explanation
-                        ? <ExplanationRow key={`${s.Code}-${s.Date}`} s={s} />
-                        : <PlainRow key={`${s.Code}-${s.Date}`} s={s} />
-                    )}
-                  </tbody>
-                </table>
-                {(signalData?.signals ?? []).length === 0 && (
-                  <p className="text-center py-8 text-gray-400">シグナルなし</p>
-                )}
-              </div>
-            </>
+                アップグレード
+              </Link>
+            </div>
           )}
+
+          <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-700">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-slate-800 text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                <tr>
+                  <th className="px-4 py-3 text-left">銘柄</th>
+                  <th className="px-4 py-3 text-left">シグナル日</th>
+                  <th className="px-4 py-3 text-center">シグナル</th>
+                  <th className="px-4 py-3 text-right">確率</th>
+                  <th className="px-4 py-3 text-right">実績リターン</th>
+                  <th className="px-4 py-3 text-center">的中</th>
+                  <th className="px-4 py-3 text-center">AI説明</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
+                {(signalData?.signals ?? [])
+                  .filter((s: Signal) => s.up_probability * 100 >= minProb)
+                  .map((s: Signal) =>
+                    s.explanation
+                      ? <ExplanationRow key={`${s.Code}-${s.Date}`} s={s} />
+                      : <PlainRow key={`${s.Code}-${s.Date}`} s={s} />
+                  )}
+              </tbody>
+            </table>
+            {(signalData?.signals ?? []).filter((s: Signal) => s.up_probability * 100 >= minProb).length === 0 && (
+              <p className="text-center py-8 text-gray-400">
+                {(signalData?.signals ?? []).length > 0
+                  ? `確度 ${minProb}% 以上のシグナルなし（スライダーを下げると表示されます）`
+                  : "シグナルなし"}
+              </p>
+            )}
+          </div>
         </>
       )}
     </div>
