@@ -76,22 +76,22 @@ export default function AdminPage() {
 
   const { data: usersData, isLoading: usersLoading } = useSWR<{ users: UserRow[]; total: number }>(
     user ? "admin-users" : null,
-    () => apiFetch("/api/admin/users?per_page=20"),
+    () => apiFetch<{ users: UserRow[]; total: number }>("/api/admin/users?per_page=20"),
   );
 
   const { data: dailySig } = useSWR<{ data: { date: string; total: number; up: number; accuracy_pct: number | null }[] }>(
     user ? "admin-daily-sig" : null,
-    () => apiFetch("/api/admin/signals/daily?days=14"),
+    () => apiFetch<{ data: { date: string; total: number; up: number; accuracy_pct: number | null }[] }>("/api/admin/signals/daily?days=14"),
   );
 
   const { data: modelMetrics } = useSWR<{ metrics: ModelMetricRow[] }>(
     user ? "admin-model-metrics" : null,
-    () => apiFetch("/api/admin/model/metrics?limit=15"),
+    () => apiFetch<{ metrics: ModelMetricRow[] }>("/api/admin/model/metrics?limit=15"),
   );
 
   const { data: featureData } = useSWR<{ features: FeatureImportance[]; trained_at: string | null; mode: string | null }>(
     user ? "admin-features" : null,
-    () => apiFetch("/api/admin/model/features?top_n=15"),
+    () => apiFetch<{ features: FeatureImportance[]; trained_at: string | null; mode: string | null }>("/api/admin/model/features?top_n=15"),
   );
 
   if (loading) return <div className="text-center py-16 text-gray-400">読み込み中...</div>;
