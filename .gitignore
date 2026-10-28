@@ -44,3 +44,4 @@ Thumbs.db
 # ログ
 *.log
 logs/
+frontend/tsconfig.tsbuildinfo
