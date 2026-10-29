@@ -1,7 +1,7 @@
 """
 JWT 認証ユーティリティ
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -18,6 +18,10 @@ from app.models import User
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
+# bcrypt は 72 バイトを超える入力を黙って切り詰めるため上限を設ける
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_MAX_LENGTH = 72
+
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
@@ -27,9 +31,18 @@ def hash_password(plain: str) -> str:
     return pwd_context.hash(plain)
 
 
+def validate_password(password: str) -> str:
+    """パスワードのバリデーション。問題があれば ValueError を raise する"""
+    if len(password) < PASSWORD_MIN_LENGTH:
+        raise ValueError(f"パスワードは{PASSWORD_MIN_LENGTH}文字以上で設定してください")
+    if len(password) > PASSWORD_MAX_LENGTH:
+        raise ValueError(f"パスワードは{PASSWORD_MAX_LENGTH}文字以内で設定してください")
+    return password
+
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (
+    expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     to_encode["exp"] = expire
@@ -67,7 +80,7 @@ async def require_pro(current_user: User = Depends(get_current_user)) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="この機能は Pro プランが必要です",
         )
-    if current_user.plan_expires_at and current_user.plan_expires_at < datetime.utcnow():
+    if current_user.plan_expires_at and current_user.plan_expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Pro プランの有効期限が切れています",

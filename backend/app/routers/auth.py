@@ -11,7 +11,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.auth import hash_password, verify_password, create_access_token, get_current_user
+from app.auth import hash_password, verify_password, create_access_token, get_current_user, validate_password
 from app.database import get_db
 from app.limiter import limiter
 from app.models import User
@@ -62,6 +62,11 @@ async def register(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
+    try:
+        validate_password(body.password)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     result = await db.execute(select(User).where(User.email == body.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="このメールアドレスは既に登録されています")
@@ -141,7 +146,9 @@ async def request_password_reset(
 
 
 @router.post("/password-reset/confirm")
+@limiter.limit("5/minute")
 async def confirm_password_reset(
+    request: Request,
     body: PasswordResetConfirm,
     db: AsyncSession = Depends(get_db),
 ):
@@ -157,8 +164,10 @@ async def confirm_password_reset(
     if datetime.utcnow() > user.reset_token_expires_at:
         raise HTTPException(status_code=400, detail="リセットトークンの有効期限が切れています")
 
-    if len(body.new_password) < 8:
-        raise HTTPException(status_code=422, detail="パスワードは8文字以上で設定してください")
+    try:
+        validate_password(body.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     user.hashed_password = hash_password(body.new_password)
     user.reset_token = None

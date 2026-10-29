@@ -58,13 +58,14 @@ async def create_checkout_session(
 
     customer_id = await _get_or_create_customer(current_user, db)
 
+    base = settings.frontend_url.rstrip("/")
     session = stripe.checkout.Session.create(
         customer=customer_id,
         payment_method_types=["card"],
         line_items=[{"price": settings.stripe_price_id_pro, "quantity": 1}],
         mode="subscription",
-        success_url="http://localhost:3000/billing/success",
-        cancel_url="http://localhost:3000/billing/cancel",
+        success_url=f"{base}/billing/success",
+        cancel_url=f"{base}/billing",
         metadata={"user_id": str(current_user.id)},
     )
     return CheckoutResponse(url=session.url)
@@ -81,9 +82,10 @@ async def create_portal_session(
     if not current_user.stripe_customer_id:
         raise HTTPException(status_code=400, detail="Stripe 顧客が未作成です")
 
+    base = settings.frontend_url.rstrip("/")
     session = stripe.billing_portal.Session.create(
         customer=current_user.stripe_customer_id,
-        return_url="http://localhost:3000/account",
+        return_url=f"{base}/account",
     )
     return PortalResponse(url=session.url)
 
