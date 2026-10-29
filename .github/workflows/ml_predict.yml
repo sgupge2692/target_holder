@@ -1,0 +1,56 @@
+name: Daily ML Prediction
+
+on:
+  schedule:
+    # 毎営業日 JST 06:30 (UTC 21:30) に実行
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch:  # 手動実行も可能
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    # ML_ENABLED=true になるまでスキップ
+    if: vars.ML_ENABLED == 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install ML dependencies
+        run: |
+          cd ml
+          pip install -r requirements.txt
+
+      - name: Run daily prediction
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          JQUANTS_MAIL_ADDRESS: ${{ secrets.JQUANTS_MAIL_ADDRESS }}
+          JQUANTS_PASSWORD: ${{ secrets.JQUANTS_PASSWORD }}
+        run: |
+          cd ml
+          echo "=== 特徴量取得 ==="
+          python pipeline/fetch_features.py || echo "WARNING: fetch_features failed"
+
+          echo "=== 予測実行 ==="
+          python pipeline/predict.py
+
+          echo "=== 完了 ==="
+
+      - name: Send daily signal email
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+        run: |
+          cd backend
+          pip install -r requirements.txt -q
+          python scripts/send_daily_signals.py || echo "WARNING: email送信失敗（設定確認）"

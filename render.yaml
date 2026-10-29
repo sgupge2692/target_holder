@@ -1,0 +1,36 @@
+services:
+  # ── バックエンド API ──────────────────────────────────────────────────
+  - type: web
+    name: stock-intelligence-api
+    runtime: python
+    region: singapore  # 日本に近いリージョン
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash scripts/render_start.sh
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false  # Supabase の接続文字列を手動設定
+      - key: REDIS_URL
+        sync: false  # Upstash の接続文字列を手動設定
+      - key: JWT_SECRET
+        generateValue: true
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_ID_PRO
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: JQUANTS_MAIL_ADDRESS
+        sync: false
+      - key: JQUANTS_PASSWORD
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: FRONTEND_URL
+        value: https://your-app.vercel.app
+      - key: PYTHON_VERSION
+        value: "3.11.0"

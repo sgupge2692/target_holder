@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone",
+  // Vercel では standalone 不要。Docker(VPS)デプロイ時は OUTPUT=standalone を env で指定
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" } : {}),
   async rewrites() {
     return [
       {
