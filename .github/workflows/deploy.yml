@@ -9,6 +9,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    # Repository Variable VPS_READY=true を設定するまでスキップ
+    # 設定方法: GitHub → Settings → Variables → New repository variable
+    #   Name: VPS_READY  Value: true
+    if: vars.VPS_READY == 'true'
 
     steps:
       - uses: actions/checkout@v4
