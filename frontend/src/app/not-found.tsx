@@ -1,18 +1,23 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Home, TrendingUp } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-6 px-4 text-center">
-      <div className="w-20 h-20 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
-        <Search className="w-10 h-10 text-gray-400" />
+    <div className="min-h-[65vh] flex flex-col items-center justify-center gap-6 px-4 text-center">
+      {/* 大きな数字 */}
+      <div className="relative">
+        <p className="text-[9rem] font-black text-gray-100 dark:text-slate-800 leading-none select-none">
+          404
+        </p>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/30">
+            <TrendingUp size={32} className="text-white" />
+          </div>
+        </div>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-6xl font-extrabold text-gray-200 dark:text-slate-700">404</p>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white -mt-4">
-          ページが見つかりません
-        </h1>
+      <div className="space-y-1.5 -mt-2">
+        <h1 className="text-2xl font-black tracking-tight">ページが見つかりません</h1>
         <p className="text-sm text-gray-500 dark:text-slate-400">
           お探しのページは移動または削除された可能性があります。
         </p>
@@ -20,8 +25,9 @@ export default function NotFound() {
 
       <Link
         href="/"
-        className="bg-brand-600 hover:bg-brand-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors"
+        className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-md shadow-brand-500/20"
       >
+        <Home size={15} />
         ホームへ戻る
       </Link>
     </div>
