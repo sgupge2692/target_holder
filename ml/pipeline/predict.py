@@ -221,7 +221,7 @@ def load_models():
     return lgbm, xgb, scaler, weights, feat_cols
 
 
-def main():
+def main(output_summary: str | None = None, dry_run: bool = False):
     engine = create_engine(DATABASE_URL)
 
     lgbm, xgb, scaler, weights, feat_cols = load_models()
@@ -280,20 +280,43 @@ def main():
     signals["explanation"] = explanations
     signals["key_factors"] = key_factors_list
 
-    # DB に保存
-    out = signals[["Code", "Date", "up_probability", "signal", "predicted_at", "explanation", "key_factors"]]
-    out.to_sql("predictions", engine, if_exists="append", index=False)
-
     up_count = int((signals["signal"] == "UP").sum())
     down_count = int((signals["signal"] == "DOWN").sum())
-    print(f"Saved {len(signals)} signals (UP: {up_count}, DOWN: {down_count})")
+
+    # DB に保存（dry_run のときはスキップ）
+    out = signals[["Code", "Date", "up_probability", "signal", "predicted_at", "explanation", "key_factors"]]
+    if dry_run:
+        print(f"[DRY RUN] Would save {len(signals)} signals (UP: {up_count}, DOWN: {down_count})")
+    else:
+        out.to_sql("predictions", engine, if_exists="append", index=False)
+        print(f"Saved {len(signals)} signals (UP: {up_count}, DOWN: {down_count})")
+
     if OPENAI_API_KEY:
         print("LLM explanations generated.")
     else:
         print("OPENAI_API_KEY not set — skipped LLM explanations.")
 
+    # ── JSON サマリー出力（CI/監視用） ──────────────────────────────────
+    if output_summary:
+        summary = {
+            "predicted_at": datetime.now().isoformat(),
+            "total": len(signals),
+            "up_count": up_count,
+            "down_count": down_count,
+            "top_up": (
+                signals[signals["signal"] == "UP"]
+                .nlargest(5, "up_probability")[["Code", "up_probability"]]
+                .rename(columns={"Code": "code", "up_probability": "prob"})
+                .to_dict(orient="records")
+            ),
+        }
+        with open(output_summary, "w", encoding="utf-8") as f:
+            json.dump(summary, f, ensure_ascii=False, indent=2)
+        print(f"Summary written to {output_summary}")
+
     # ── Prometheus Push Gateway にメトリクスを送信（任意）──────────────────
-    _push_metrics(up_count, down_count)
+    if not dry_run:
+        _push_metrics(up_count, down_count)
 
 
 def _push_metrics(up_count: int, down_count: int) -> None:
@@ -315,4 +338,15 @@ def _push_metrics(up_count: int, down_count: int) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="翌日騰落予測")
+    parser.add_argument(
+        "--output-summary", metavar="PATH",
+        help="シグナルサマリーを JSON に出力するパス（省略時は出力なし）"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="DBに保存しないで予測だけ実行（デバッグ用）"
+    )
+    args = parser.parse_args()
+    main(output_summary=args.output_summary, dry_run=args.dry_run)

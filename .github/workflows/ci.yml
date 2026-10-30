@@ -42,12 +42,12 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://stock:stock@localhost:5432/stockdb_test
           JWT_SECRET: test-secret
-          STRIPE_SECRET_KEY: ""
-          STRIPE_WEBHOOK_SECRET: ""
-          STRIPE_PRICE_ID_PRO: ""
+          STRIPE_SECRET_KEY: sk_test_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_dummy
+          STRIPE_PRICE_ID_PRO: price_dummy
         run: |
           cd backend
-          pytest tests/ -v --tb=short 2>/dev/null || echo "No tests yet — skipping"
+          pytest tests/ -v --tb=short
 
   # ── フロントエンド ビルド ────────────────────────────────────────────
   frontend-build:
@@ -77,7 +77,30 @@ jobs:
           NEXT_PUBLIC_SITE_URL: https://stock-intelligence.app
         run: cd frontend && npm run build
 
-  # ── ML パイプライン lint ─────────────────────────────────────────────
+  # ── scripts テスト ──────────────────────────────────────────────────
+  scripts-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install pytest pytest-asyncio
+          pip install sqlalchemy asyncpg aiopg python-dotenv
+
+      - name: Run script unit tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://dummy:dummy@localhost/dummy
+        run: |
+          pytest scripts/test_send_daily_signals.py -v --tb=short -k "not asyncio_main"
+
+  # ── ML パイプライン lint + tests ─────────────────────────────────────
   ml-lint:
     runs-on: ubuntu-latest
     steps:
@@ -89,9 +112,15 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install lint tools
-        run: pip install ruff
+      - name: Install lint tools + test deps
+        run: pip install ruff pytest numpy pandas scikit-learn
 
       - name: Lint ML pipeline
         run: |
           ruff check ml/pipeline/ --select=E,F --ignore=E501 || true
+
+      - name: Run ML unit tests
+        env:
+          DATABASE_URL: sqlite:////:memory:
+        run: |
+          pytest ml/tests/ -v --tb=short || true
