@@ -28,7 +28,11 @@ async def test_checkout_creates_stripe_session(client):
     mock_session = MagicMock()
     mock_session.url = "https://checkout.stripe.com/test_session_url"
 
-    with patch("stripe.checkout.Session.create", return_value=mock_session):
+    mock_customer = MagicMock()
+    mock_customer.id = "cus_test_123"
+
+    with patch("stripe.Customer.create", return_value=mock_customer), \
+         patch("stripe.checkout.Session.create", return_value=mock_session):
         res = await client.post(
             "/api/billing/checkout",
             headers={"Authorization": f"Bearer {token}"},
@@ -87,7 +91,11 @@ async def test_checkout_returns_url_for_free_user(client):
     mock_session = MagicMock()
     mock_session.url = "https://checkout.stripe.com/c/pay/cs_test_xxx"
 
-    with patch("stripe.checkout.Session.create", return_value=mock_session):
+    mock_customer = MagicMock()
+    mock_customer.id = "cus_test_456"
+
+    with patch("stripe.Customer.create", return_value=mock_customer), \
+         patch("stripe.checkout.Session.create", return_value=mock_session):
         res = await client.post(
             "/api/billing/checkout",
             headers={"Authorization": f"Bearer {token}"},

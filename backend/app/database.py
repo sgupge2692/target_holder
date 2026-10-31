@@ -9,14 +9,18 @@ from app.base import Base  # noqa: F401 – re-export for convenience
 _pool_size = int(os.getenv("DB_POOL_SIZE", "5"))
 _max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=False,
-    pool_size=_pool_size,
-    max_overflow=_max_overflow,
-    pool_pre_ping=True,       # 切断された接続を自動破棄
-    pool_recycle=1800,        # 30分で接続を再作成（長時間放置対策）
-)
+# SQLite（テスト用インメモリDB）ではプールサイズ指定不可
+_is_sqlite = settings.database_url.startswith("sqlite")
+_engine_kwargs: dict = {"echo": False}
+if not _is_sqlite:
+    _engine_kwargs.update({
+        "pool_size": _pool_size,
+        "max_overflow": _max_overflow,
+        "pool_pre_ping": True,   # 切断された接続を自動破棄
+        "pool_recycle": 1800,    # 30分で接続を再作成（長時間放置対策）
+    })
+
+engine = create_async_engine(settings.database_url, **_engine_kwargs)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

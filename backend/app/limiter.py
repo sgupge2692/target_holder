@@ -14,16 +14,23 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 REDIS_URL = os.getenv("REDIS_URL", "")
+TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
 
-if REDIS_URL:
+if TESTING:
+    # テスト環境: 非常に高いリミットで事実上無制限
+    storage_uri = "memory://"
+    _default_limits = ["100000/minute"]
+elif REDIS_URL:
     # Redisバックエンド（本番推奨）
     storage_uri = REDIS_URL
+    _default_limits = ["120/minute"]
 else:
     # メモリバックエンド（開発・シングルノード）
     storage_uri = "memory://"
+    _default_limits = ["120/minute"]
 
 limiter = Limiter(
     key_func=get_remote_address,
     storage_uri=storage_uri,
-    default_limits=["120/minute"],
+    default_limits=_default_limits,
 )

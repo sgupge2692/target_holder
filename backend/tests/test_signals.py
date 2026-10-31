@@ -11,14 +11,14 @@ async def _get_token(client, email="sig@example.com", password="password123"):
 
 @pytest.mark.asyncio
 async def test_signals_requires_auth(client):
-    res = await client.get("/api/signals/")
+    res = await client.get("/api/signals/latest")
     assert res.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_signals_empty_for_new_user(client):
     token = await _get_token(client)
-    res = await client.get("/api/signals/", headers={"Authorization": f"Bearer {token}"})
+    res = await client.get("/api/signals/latest", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
     data = res.json()
     assert "signals" in data

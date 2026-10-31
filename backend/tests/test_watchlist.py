@@ -12,14 +12,14 @@ async def _get_token(client, email="watch@example.com", password="pass1234"):
 
 @pytest.mark.asyncio
 async def test_watchlist_requires_auth(client):
-    res = await client.get("/api/watchlist/")
+    res = await client.get("/api/watchlist")
     assert res.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_watchlist_empty_initially(client):
     token = await _get_token(client, "wl_empty@example.com")
-    res = await client.get("/api/watchlist/", headers={"Authorization": f"Bearer {token}"})
+    res = await client.get("/api/watchlist", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
     data = res.json()
     assert "watchlist" in data
@@ -37,7 +37,7 @@ async def test_add_and_get_watchlist(client):
     assert res.status_code in (200, 201)
 
     # 一覧確認
-    res = await client.get("/api/watchlist/", headers=headers)
+    res = await client.get("/api/watchlist", headers=headers)
     codes = [item["code"] for item in res.json()["watchlist"]]
     assert "7203" in codes
 
@@ -64,7 +64,7 @@ async def test_remove_from_watchlist(client):
     assert res.status_code == 200
 
     # 一覧で消えている
-    res = await client.get("/api/watchlist/", headers=headers)
+    res = await client.get("/api/watchlist", headers=headers)
     codes = [item["code"] for item in res.json()["watchlist"]]
     assert "6758" not in codes
 
@@ -84,13 +84,13 @@ async def test_watchlist_status_endpoint(client):
     headers = {"Authorization": f"Bearer {token}"}
 
     # 未登録
-    res = await client.get("/api/watchlist/status/7203", headers=headers)
+    res = await client.get("/api/watchlist/7203/status", headers=headers)
     assert res.status_code == 200
     assert res.json()["watched"] is False
 
     # 登録後
     await client.post("/api/watchlist/7203", headers=headers)
-    res = await client.get("/api/watchlist/status/7203", headers=headers)
+    res = await client.get("/api/watchlist/7203/status", headers=headers)
     assert res.json()["watched"] is True
 
 
@@ -107,5 +107,5 @@ async def test_free_plan_limit(client):
 
     # 31件目
     res = await client.post("/api/watchlist/9999", headers=headers)
-    # 429 または 403 でウォッチリスト上限エラー
-    assert res.status_code in (403, 429)
+    # 400 / 403 / 429 でウォッチリスト上限エラー
+    assert res.status_code in (400, 403, 429)

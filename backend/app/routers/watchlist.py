@@ -26,32 +26,19 @@ async def get_watchlist(
     current_user: User = Depends(get_current_user),
 ):
     """ウォッチリスト一覧（最新シグナル・株価付き）"""
+    # 相関サブクエリ方式（PostgreSQL / SQLite 両対応）
     rows = await db.execute(text("""
         SELECT
             w.code,
             w.company_name,
             w.created_at,
-            p.signal,
-            p.up_probability,
-            p.is_correct,
-            p."Date"    AS signal_date,
-            q."Close"   AS latest_price,
-            q."AdjustmentClose" AS adj_close
+            (SELECT signal       FROM predictions WHERE "Code" = w.code ORDER BY predicted_at DESC LIMIT 1) AS signal,
+            (SELECT up_probability FROM predictions WHERE "Code" = w.code ORDER BY predicted_at DESC LIMIT 1) AS up_probability,
+            (SELECT is_correct   FROM predictions WHERE "Code" = w.code ORDER BY predicted_at DESC LIMIT 1) AS is_correct,
+            (SELECT "Date"       FROM predictions WHERE "Code" = w.code ORDER BY predicted_at DESC LIMIT 1) AS signal_date,
+            (SELECT "Close"      FROM daily_quotes WHERE "Code" = w.code ORDER BY "Date" DESC LIMIT 1) AS latest_price,
+            (SELECT "AdjustmentClose" FROM daily_quotes WHERE "Code" = w.code ORDER BY "Date" DESC LIMIT 1) AS adj_close
         FROM watchlist w
-        LEFT JOIN LATERAL (
-            SELECT signal, up_probability, is_correct, "Date"
-            FROM predictions
-            WHERE "Code" = w.code
-            ORDER BY predicted_at DESC
-            LIMIT 1
-        ) p ON true
-        LEFT JOIN LATERAL (
-            SELECT "Close", "AdjustmentClose"
-            FROM daily_quotes
-            WHERE "Code" = w.code
-            ORDER BY "Date" DESC
-            LIMIT 1
-        ) q ON true
         WHERE w.user_id = :uid
         ORDER BY w.created_at DESC
     """), {"uid": current_user.id})

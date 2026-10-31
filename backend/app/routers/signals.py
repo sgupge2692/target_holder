@@ -41,16 +41,19 @@ async def get_latest_signals(
     if signal:
         params["signal"] = signal
 
+    # 各銘柄の最新シグナルを1件取得（PostgreSQL / SQLite 両対応）
     rows = await db.execute(text(f"""
-        SELECT DISTINCT ON (p."Code")
-               p."Code", p."Date", p.signal, p.up_probability,
+        SELECT p."Code", p."Date", p.signal, p.up_probability,
                p.actual_return, p.is_correct,
                p.explanation, p.key_factors,
                s.company_name
         FROM predictions p
         LEFT JOIN listed_stocks s ON s.code = p."Code"
+        WHERE p.id IN (
+            SELECT MAX(id) FROM predictions GROUP BY "Code"
+        )
         {where}
-        ORDER BY p."Code", p.predicted_at DESC
+        ORDER BY p.up_probability DESC
         LIMIT :limit
     """), params)
 
@@ -90,7 +93,7 @@ async def export_signals_csv(
     if current_user.plan != "pro":
         raise HTTPException(status_code=403, detail="CSV エクスポートは Pro プラン限定です")
 
-    where_parts = ['"Date" >= CURRENT_DATE - :days * INTERVAL \'1 day\'']
+    where_parts = ['"Date" >= date(\'now\', \'-\' || :days || \' days\')']
     params: dict = {"days": days}
     if signal:
         where_parts.append("p.signal = :signal")
@@ -179,10 +182,10 @@ async def get_backtest_chart(
     if cached is not None:
         return cached
 
-    # 月別精度
+    # 月別精度（strftime は PostgreSQL / SQLite 両対応のサブセット）
     monthly_rows = await db.execute(text("""
         SELECT
-            TO_CHAR("Date", 'YYYY-MM')                                         AS month,
+            substr("Date", 1, 7)                                               AS month,
             signal,
             COUNT(*)                                                            AS total,
             SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)                        AS correct,
@@ -193,8 +196,8 @@ async def get_backtest_chart(
             ROUND(AVG(actual_return) * 100, 3)                                 AS avg_return_pct
         FROM predictions
         WHERE actual_return IS NOT NULL
-          AND "Date" >= (CURRENT_DATE - (:months || ' months')::INTERVAL)
-        GROUP BY TO_CHAR("Date", 'YYYY-MM'), signal
+          AND "Date" >= date('now', '-' || :months || ' months')
+        GROUP BY substr("Date", 1, 7), signal
         ORDER BY month ASC, signal
     """), {"months": months})
 
@@ -215,7 +218,7 @@ async def get_backtest_chart(
         FROM predictions
         WHERE signal = 'UP'
           AND actual_return IS NOT NULL
-          AND "Date" >= (CURRENT_DATE - (:months || ' months')::INTERVAL)
+          AND "Date" >= date('now', '-' || :months || ' months')
         ORDER BY "Date" ASC
     """), {"months": months})
 

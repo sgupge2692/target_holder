@@ -134,10 +134,11 @@ async def test_main_dry_run_does_not_send():
     mock_user = MagicMock()
     mock_user.email = "pro@example.com"
 
+    mock_engine = AsyncMock()
     with patch("scripts.send_daily_signals.fetch_today_signals", new=AsyncMock(return_value=mock_signals)):
         with patch("scripts.send_daily_signals.fetch_accuracy", new=AsyncMock(return_value={})):
             with patch("scripts.send_daily_signals.get_alert_subscribers", new=AsyncMock(return_value=[mock_user])):
-                with patch("scripts.send_daily_signals.create_async_engine"):
+                with patch("scripts.send_daily_signals.create_async_engine", return_value=mock_engine):
                     with patch("scripts.send_daily_signals.AsyncSession"):
                         with patch("scripts.send_daily_signals.send_email") as mock_send:
                             with patch("scripts.send_daily_signals.render_daily_signal_email", return_value="<html/>"):
@@ -157,10 +158,11 @@ async def test_main_with_limit():
     mock_signals = [{"code": "7203", "company_name": "トヨタ", "signal": "UP", "probability_pct": 80.0, "pred_date": "2026-10-31"}]
     mock_users = [MagicMock(email=f"user{i}@example.com") for i in range(5)]
 
+    mock_engine2 = AsyncMock()
     with patch("scripts.send_daily_signals.fetch_today_signals", new=AsyncMock(return_value=mock_signals)):
         with patch("scripts.send_daily_signals.fetch_accuracy", new=AsyncMock(return_value={})):
             with patch("scripts.send_daily_signals.get_alert_subscribers", new=AsyncMock(return_value=mock_users)):
-                with patch("scripts.send_daily_signals.create_async_engine"):
+                with patch("scripts.send_daily_signals.create_async_engine", return_value=mock_engine2):
                     with patch("scripts.send_daily_signals.AsyncSession"):
                         with patch("scripts.send_daily_signals.send_email", return_value=True) as mock_send:
                             with patch("scripts.send_daily_signals.render_daily_signal_email", return_value="<html/>"):
