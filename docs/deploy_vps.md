@@ -118,12 +118,23 @@ make prod-restart
 
 リポジトリの **Settings → Secrets and variables → Actions** で以下を追加:
 
+**Secrets:**
+
 | Secret 名 | 値 |
 |-----------|---|
 | `VPS_HOST` | VPS の IP アドレス |
 | `VPS_USER` | SSH ユーザー名 (例: `ubuntu`) |
 | `VPS_SSH_KEY` | SSH 秘密鍵の内容 (`cat ~/.ssh/id_rsa`) |
-| `VPS_PORT` | SSH ポート (デフォルト: `22`) |
+| `VPS_PORT` | SSH ポート (デフォルト: `22`、省略可) |
+
+**Variables (Repository variables):**
+
+| Variable 名 | 値 |
+|-------------|---|
+| `VPS_READY` | `true` |
+
+> `VPS_READY=true` を設定するまでデプロイジョブはスキップされます。  
+> Secrets 設定後にこの変数を `true` にしてください。
 
 これで `main` ブランチへの push 時に自動デプロイされます。
 

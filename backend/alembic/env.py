@@ -19,8 +19,8 @@ target_metadata = Base.metadata
 
 
 def get_sync_url() -> str:
-    """asyncpg URL を psycopg2 URL に変換"""
-    url = config.get_main_option("sqlalchemy.url") or ""
+    """asyncpg URL を psycopg2 URL に変換（環境変数 DATABASE_URL を優先）"""
+    url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url") or ""
     return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://").replace(
         "postgresql://", "postgresql+psycopg2://"
     )

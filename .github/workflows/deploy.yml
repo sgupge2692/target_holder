@@ -43,25 +43,9 @@ jobs:
             echo "=== バックエンドビルド ==="
             docker compose -f docker-compose.prod.yml build backend
 
-            echo "=== DBマイグレーション ==="
+            echo "=== DBマイグレーション (Alembic) ==="
             docker compose -f docker-compose.prod.yml run --rm backend \
-              python -c "
-            import asyncio
-            from app.database import engine
-            from app.base import Base
-            from app.models import User
-            from sqlalchemy import text
-            async def migrate():
-                async with engine.begin() as conn:
-                    await conn.run_sync(Base.metadata.create_all)
-                    # email_signal_alert カラムを追加（既存DBの場合）
-                    try:
-                        await conn.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_signal_alert BOOLEAN DEFAULT FALSE'))
-                        await conn.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_unsubscribed BOOLEAN DEFAULT FALSE'))
-                    except:
-                        pass
-            asyncio.run(migrate())
-            "
+              alembic upgrade head
 
             echo "=== コンテナ再起動 ==="
             docker compose -f docker-compose.prod.yml up -d --remove-orphans

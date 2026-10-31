@@ -10,18 +10,7 @@ jobs:
   # ── バックエンド テスト ──────────────────────────────────────────────
   backend-test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: stockdb_test
-          POSTGRES_USER: stock
-          POSTGRES_PASSWORD: stock
-        ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
+    # テストはインメモリ SQLite で完結するため DB サービス不要
 
     steps:
       - uses: actions/checkout@v4
@@ -40,14 +29,15 @@ jobs:
 
       - name: Run backend tests
         env:
-          DATABASE_URL: postgresql+asyncpg://stock:stock@localhost:5432/stockdb_test
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
           JWT_SECRET: test-secret
           STRIPE_SECRET_KEY: sk_test_dummy
           STRIPE_WEBHOOK_SECRET: whsec_dummy
           STRIPE_PRICE_ID_PRO: price_dummy
+          TESTING: "1"
         run: |
           cd backend
-          pytest tests/ -v --tb=short
+          python -m pytest tests/ -v --tb=short
 
   # ── フロントエンド ビルド ────────────────────────────────────────────
   frontend-build:
