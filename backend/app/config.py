@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     # 本番 URL（Stripe リダイレクト先など）
     frontend_url: str = "http://localhost:3000"
 
+    # オーナー（作成者）メールアドレス: カンマ区切りで複数指定可
+    # 例: OWNER_EMAILS=you@example.com,partner@example.com
+    owner_emails: str = ""
+
+    @property
+    def owner_email_set(self) -> set[str]:
+        """オーナーメールアドレスを小文字 set で返す"""
+        return {e.strip().lower() for e in self.owner_emails.split(",") if e.strip()}
+
     class Config:
         env_file = ".env"
         extra = "ignore"

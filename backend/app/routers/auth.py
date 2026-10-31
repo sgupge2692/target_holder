@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.auth import hash_password, verify_password, create_access_token, get_current_user, validate_password
+from app.config import settings
 from app.database import get_db
 from app.limiter import limiter
 from app.models import User
@@ -71,7 +72,14 @@ async def register(
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="このメールアドレスは既に登録されています")
 
-    user = User(email=body.email, hashed_password=hash_password(body.password))
+    # オーナーメールなら永久 Pro を付与
+    is_owner = body.email.lower() in settings.owner_email_set
+    user = User(
+        email=body.email,
+        hashed_password=hash_password(body.password),
+        plan="pro" if is_owner else "free",
+        plan_expires_at=None,  # None = 永久（Stripe 管理外）
+    )
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -104,6 +112,12 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="メールアドレスまたはパスワードが違います",
         )
+
+    # オーナーメールならログイン時も永久 Pro を保証（既存アカウント対応）
+    if form.username.lower() in settings.owner_email_set and user.plan != "pro":
+        user.plan = "pro"
+        user.plan_expires_at = None
+        await db.commit()
 
     token = create_access_token({"sub": str(user.id)})
     return TokenResponse(access_token=token)
