@@ -3,10 +3,13 @@ const nextConfig = {
   // Vercel では standalone 不要。Docker(VPS)デプロイ時は OUTPUT=standalone を env で指定
   ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" } : {}),
   async rewrites() {
+    // API_INTERNAL_URL: サーバーサイドプロキシ用（Docker内では backend:8000）
+    // NEXT_PUBLIC_API_URL: ブラウザからの直接アクセス用（localhost:8000）
+    const internalUrl = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://backend:8000";
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://backend:8000"}/api/:path*`,
+        destination: `${internalUrl}/api/:path*`,
       },
     ];
   },
