@@ -241,6 +241,17 @@ export default function HomePage() {
   const [minProb, setMinProb] = useState(60);
   const [csvLoading, setCsvLoading] = useState(false);
 
+  // hooks は早期 return より前に置く（React の rules of hooks）
+  const { data: signalData, isLoading: sigLoading } = useSWR(
+    user ? ["signals", tab] : null,
+    () => getLatestSignals(tab === "ALL" ? undefined : tab),
+    { refreshInterval: 60_000 },
+  );
+
+  const { data: accData, isLoading: accLoading } = useSWR("accuracy", getAccuracy, {
+    revalidateOnFocus: false,
+  });
+
   const handleCsvDownload = async () => {
     setCsvLoading(true);
     try {
@@ -254,16 +265,6 @@ export default function HomePage() {
   };
 
   if (!loading && !user) return <LandingPage />;
-
-  const { data: signalData, isLoading: sigLoading } = useSWR(
-    user ? ["signals", tab] : null,
-    () => getLatestSignals(tab === "ALL" ? undefined : tab),
-    { refreshInterval: 60_000 },
-  );
-
-  const { data: accData, isLoading: accLoading } = useSWR("accuracy", getAccuracy, {
-    revalidateOnFocus: false,
-  });
 
   const accuracyRows: AccuracyRow[] = accData?.accuracy ?? [];
   const upRow   = accuracyRows.find(r => r.signal === "UP");
