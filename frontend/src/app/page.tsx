@@ -16,26 +16,44 @@ import {
 
 type Tab = "ALL" | "UP" | "DOWN";
 
-/** 確率を色クラスに変換 */
-function probColor(prob: number): string {
+/** シグナルの「確度」= UP なら up_probability、DOWN なら 1 - up_probability */
+function signalProb(signal: string, upProb: number): number {
+  return signal === "DOWN" ? 1 - upProb : upProb;
+}
+
+/** 確率を色クラスに変換（UP:緑系 / DOWN:赤系） */
+function probColor(prob: number, signal: string): string {
+  if (signal === "DOWN") {
+    if (prob >= 0.8) return "bg-red-500";
+    if (prob >= 0.7) return "bg-red-400";
+    if (prob >= 0.6) return "bg-orange-400";
+    return "bg-gray-400";
+  }
   if (prob >= 0.8)  return "bg-brand-500";
   if (prob >= 0.7)  return "bg-emerald-400";
   if (prob >= 0.6)  return "bg-amber-400";
   return "bg-gray-400";
 }
 
-/** 確率バー（テーブル行 / カード共用） */
-function ProbBar({ prob }: { prob: number }) {
+/** 確率バー（テーブル行 / カード共用）
+ *  signal を渡すことでDOWNのとき下落確率（=1-up_probability）を表示 */
+function ProbBar({ upProb, signal }: { upProb: number; signal: string }) {
+  const prob = signalProb(signal, upProb);
   const pct = Math.round(prob * 100);
+  const isDown = signal === "DOWN";
   return (
     <div className="flex items-center gap-2">
       <div className="prob-bar-track flex-1 min-w-[60px]">
         <div
-          className={`prob-bar-fill ${probColor(prob)}`}
+          className={`prob-bar-fill ${probColor(prob, signal)}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className={`font-mono font-semibold text-xs w-[3.4rem] text-right ${prob >= 0.75 ? "text-brand-600 dark:text-brand-400" : "text-gray-600 dark:text-slate-300"}`}>
+      <span className={`font-mono font-semibold text-xs w-[3.4rem] text-right ${
+        prob >= 0.75
+          ? isDown ? "text-red-500 dark:text-red-400" : "text-brand-600 dark:text-brand-400"
+          : "text-gray-600 dark:text-slate-300"
+      }`}>
         {pct.toFixed(1)}%
       </span>
     </div>
@@ -113,7 +131,7 @@ function SignalRow({ s }: { s: Signal }) {
         <td className="px-4 py-3.5 text-sm text-gray-500 dark:text-slate-400">{s.Date}</td>
         <td className="px-4 py-3.5 text-center"><SignalBadge signal={s.signal} /></td>
         <td className="px-4 py-3.5 w-40">
-          <ProbBar prob={s.up_probability} />
+          <ProbBar upProb={s.up_probability} signal={s.signal} />
         </td>
         <td className="px-4 py-3.5 text-right font-mono text-sm">
           {s.actual_return != null
@@ -185,9 +203,9 @@ function SignalCard({ s }: { s: Signal }) {
       {/* 確率バー */}
       <div className="my-2.5">
         <div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 mb-1">
-          <span>上昇確率</span>
+          <span>{s.signal === "DOWN" ? "下落確率" : "上昇確率"}</span>
         </div>
-        <ProbBar prob={s.up_probability} />
+        <ProbBar upProb={s.up_probability} signal={s.signal} />
       </div>
 
       {s.actual_return != null && (
@@ -271,7 +289,7 @@ export default function HomePage() {
   const downRow = accuracyRows.find(r => r.signal === "DOWN");
 
   const filtered = (signalData?.signals ?? []).filter(
-    (s: Signal) => s.up_probability * 100 >= minProb,
+    (s: Signal) => signalProb(s.signal, s.up_probability) * 100 >= minProb,
   );
 
   // 最新シグナルの日付（ライブドット用）
@@ -374,7 +392,7 @@ export default function HomePage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-slate-800 text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wide">
                 <tr>
-                  {["銘柄", "日付", "シグナル", "確率", "実績", "的中", "AI"].map(h => (
+                  {["銘柄", "日付", "シグナル", tab === "DOWN" ? "下落確率" : "上昇確率", "実績", "的中", "AI"].map(h => (
                     <th key={h} className="px-4 py-3 text-left">{h}</th>
                   ))}
                 </tr>
@@ -412,7 +430,7 @@ export default function HomePage() {
                   <th className="px-4 py-3 text-left">銘柄</th>
                   <th className="px-4 py-3 text-left">日付</th>
                   <th className="px-4 py-3 text-center">シグナル</th>
-                  <th className="px-4 py-3 text-left">確率</th>
+                  <th className="px-4 py-3 text-left">{tab === "DOWN" ? "下落確率" : "上昇確率"}</th>
                   <th className="px-4 py-3 text-right">実績</th>
                   <th className="px-4 py-3 text-center">的中</th>
                   <th className="px-4 py-3 text-center">AI</th>

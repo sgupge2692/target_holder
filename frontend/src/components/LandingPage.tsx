@@ -67,16 +67,25 @@ function SignalPreview() {
             <div className="text-xs text-gray-400">{item.code}</div>
           </div>
           <div className="text-center">
-            <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold">
-              ↑ UP
-            </span>
+            {item.signal === "UP" ? (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold">
+                ↑ UP
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-bold">
+                ↓ DOWN
+              </span>
+            )}
           </div>
           <div className="text-right">
             <div className="flex items-center justify-end gap-2">
               <div className="prob-bar-track w-12 hidden sm:block">
-                <div className="prob-bar-fill bg-brand-500" style={{ width: `${item.prob}%` }} />
+                <div
+                  className={`prob-bar-fill ${item.signal === "DOWN" ? "bg-red-500" : "bg-brand-500"}`}
+                  style={{ width: `${item.prob}%` }}
+                />
               </div>
-              <span className="font-mono font-bold text-brand-600 dark:text-brand-400 text-sm">
+              <span className={`font-mono font-bold text-sm ${item.signal === "DOWN" ? "text-red-500 dark:text-red-400" : "text-brand-600 dark:text-brand-400"}`}>
                 {item.prob}%
               </span>
             </div>
