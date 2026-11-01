@@ -40,6 +40,7 @@ class UserResponse(BaseModel):
     id: int
     email: str
     plan: str
+    is_admin: bool = False
 
     model_config = {"from_attributes": True}
 

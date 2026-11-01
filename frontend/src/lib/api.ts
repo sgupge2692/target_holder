@@ -21,7 +21,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 // ── 認証 ─────────────────────────────────────────────────────
 
 export interface TokenResponse { access_token: string; token_type: string }
-export interface MeResponse    { id: number; email: string; plan: string }
+export interface MeResponse    { id: number; email: string; plan: string; is_admin?: boolean }
 
 export const register = (email: string, password: string) =>
   apiFetch<TokenResponse>("/api/auth/register", {
@@ -177,3 +177,36 @@ export const addToWatchlist = (code: string) =>
 
 export const removeFromWatchlist = (code: string) =>
   apiFetch<{ code: string; watched: boolean }>(`/api/watchlist/${code}`, { method: "DELETE" });
+
+// ── 管理画面 ──────────────────────────────────────────────────
+
+export interface AdminStats {
+  users: { total: number; pro: number; free: number; new_this_month: number; conversion_rate_pct: number };
+  revenue: { mrr: number; arr: number };
+  signals: { total_30d: number; up_count_30d: number; down_count_30d: number; evaluated_30d: number; up_accuracy_30d: number | null };
+  daily_signups: { date: string; count: number }[];
+}
+
+export interface AdminUser {
+  id: number; email: string; plan: string; is_active: boolean;
+  email_signal_alert: boolean; created_at: string;
+}
+
+export interface AdminSignalDaily {
+  date: string; total: number; up: number; down: number; accuracy_pct: number | null;
+}
+
+export interface AdminModelMetric {
+  id: number; trained_at: string; mode: string;
+  mean_auc: number | null; std_auc: number | null;
+  lgbm_auc: number | null; xgb_auc: number | null;
+  ensemble_auc: number | null; n_samples: number | null;
+}
+
+export interface AdminFeature { feature: string; importance: number }
+
+export const getAdminStats    = () => apiFetch<AdminStats>("/api/admin/stats");
+export const getAdminUsers    = (page = 1) => apiFetch<{ users: AdminUser[]; total: number; page: number; per_page: number }>(`/api/admin/users?page=${page}&per_page=50`);
+export const getAdminSignals  = (days = 30) => apiFetch<{ data: AdminSignalDaily[] }>(`/api/admin/signals/daily?days=${days}`);
+export const getAdminMetrics  = () => apiFetch<{ metrics: AdminModelMetric[] }>("/api/admin/model/metrics");
+export const getAdminFeatures = (top_n = 20) => apiFetch<{ features: AdminFeature[]; trained_at: string | null; mode: string | null }>(`/api/admin/model/features?top_n=${top_n}`);

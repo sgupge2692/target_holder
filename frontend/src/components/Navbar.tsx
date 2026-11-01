@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Moon, Sun, BarChart2, Bookmark, User } from "lucide-react";
+import { Moon, Sun, BarChart2, Bookmark, User, ShieldCheck } from "lucide-react";
 
 function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   const pathname = usePathname();
@@ -82,6 +82,11 @@ export function Navbar() {
               <NavLink href="/account">
                 <span className="flex items-center gap-1"><User size={13} />アカウント</span>
               </NavLink>
+              {user.is_admin && (
+                <NavLink href="/admin">
+                  <span className="flex items-center gap-1"><ShieldCheck size={13} />管理</span>
+                </NavLink>
+              )}
             </>
           ) : (
             <>
