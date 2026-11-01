@@ -12,9 +12,66 @@ import { useToast } from "@/components/Toast";
 import {
   ChevronDown, ChevronRight, Download, Lightbulb,
   SlidersHorizontal, TrendingUp, TrendingDown,
+  Zap, RefreshCw, BarChart3, TrendingDown as ShortIcon, Lock,
 } from "lucide-react";
 
-type Tab = "ALL" | "UP" | "DOWN";
+// ── タブ定義 ─────────────────────────────────────────────────────────────────
+type SignalFilter = "ALL" | "UP" | "DOWN";
+type StyleTab = "daytrade" | "swing" | "longterm" | "short";
+
+interface StyleConfig {
+  id: StyleTab;
+  label: string;
+  icon: React.ElementType;
+  description: string;
+  proOnly: boolean;
+  defaultMinProb: number;
+  signalFilter: SignalFilter;
+  hint: string;
+}
+
+const STYLE_TABS: StyleConfig[] = [
+  {
+    id: "daytrade",
+    label: "デイトレ",
+    icon: Zap,
+    description: "翌日の短期騰落を予測",
+    proOnly: false,
+    defaultMinProb: 65,
+    signalFilter: "ALL",
+    hint: "AIが翌営業日に上昇 / 下落する可能性の高い銘柄を配信",
+  },
+  {
+    id: "swing",
+    label: "スイング",
+    icon: RefreshCw,
+    description: "数日〜2週間の中期保有",
+    proOnly: true,
+    defaultMinProb: 70,
+    signalFilter: "UP",
+    hint: "高確度（70%以上）の上昇シグナルのみ表示。数日〜2週間の保有を想定",
+  },
+  {
+    id: "longterm",
+    label: "長期保有",
+    icon: BarChart3,
+    description: "月次・四半期視点のトレンド",
+    proOnly: true,
+    defaultMinProb: 75,
+    signalFilter: "UP",
+    hint: "強い上昇トレンドを示す銘柄のみ（確度75%以上）。長期保有・積み立て向け",
+  },
+  {
+    id: "short",
+    label: "信用売り",
+    icon: ShortIcon,
+    description: "下落シグナル銘柄を抽出",
+    proOnly: true,
+    defaultMinProb: 65,
+    signalFilter: "DOWN",
+    hint: "下落確率の高い銘柄を抽出。信用売り・空売りの参考に",
+  },
+];
 
 /** シグナルの「確度」= UP なら up_probability、DOWN なら 1 - up_probability */
 function signalProb(signal: string, upProb: number): number {
@@ -35,8 +92,7 @@ function probColor(prob: number, signal: string): string {
   return "bg-gray-400";
 }
 
-/** 確率バー（テーブル行 / カード共用）
- *  signal を渡すことでDOWNのとき下落確率（=1-up_probability）を表示 */
+/** 確率バー（テーブル行 / カード共用）*/
 function ProbBar({ upProb, signal }: { upProb: number; signal: string }) {
   const prob = signalProb(signal, upProb);
   const pct = Math.round(prob * 100);
@@ -75,7 +131,72 @@ function ProbabilityFilter({ value, onChange }: { value: number; onChange: (v: n
   );
 }
 
-// ── 精度サマリーカード ────────────────────────────────────────────────────
+// ── 投資スタイルタブ ──────────────────────────────────────────────────────────
+function StyleTabBar({
+  current, onChange, isPro,
+}: {
+  current: StyleTab;
+  onChange: (t: StyleTab) => void;
+  isPro: boolean;
+}) {
+  return (
+    <div className="flex gap-1 overflow-x-auto no-scrollbar">
+      {STYLE_TABS.map(tab => {
+        const Icon = tab.icon;
+        const locked = tab.proOnly && !isPro;
+        const active = current === tab.id;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => !locked && onChange(tab.id)}
+            title={locked ? "Proプラン限定" : tab.description}
+            className={`
+              flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold
+              whitespace-nowrap transition-all duration-150 shrink-0 relative
+              ${active
+                ? tab.id === "short"
+                  ? "bg-red-500 text-white shadow-sm"
+                  : "bg-brand-600 text-white shadow-sm"
+                : locked
+                  ? "bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500 cursor-not-allowed"
+                  : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700"
+              }
+            `}
+          >
+            <Icon size={14} strokeWidth={2.2} />
+            <span>{tab.label}</span>
+            {locked && (
+              <Lock size={11} className="ml-0.5 opacity-60" />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Proロックオーバーレイ ────────────────────────────────────────────────────
+function ProLockedOverlay({ label }: { label: string }) {
+  return (
+    <div className="rounded-2xl border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/10 p-10 text-center">
+      <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-800/40 mb-3">
+        <Lock size={22} className="text-amber-500" />
+      </div>
+      <p className="font-bold text-gray-800 dark:text-white mb-1">「{label}」はPro限定</p>
+      <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
+        Proプランにアップグレードするとすべてのスタイルが利用可能になります
+      </p>
+      <Link
+        href="/billing"
+        className="inline-block bg-amber-500 hover:bg-amber-600 text-white px-6 py-2 rounded-xl font-bold text-sm transition-colors"
+      >
+        Proにアップグレード →
+      </Link>
+    </div>
+  );
+}
+
+// ── 精度サマリーカード ────────────────────────────────────────────────────────
 function AccuracyCard({ row }: { row: AccuracyRow }) {
   const isUp = row.signal === "UP";
   return (
@@ -112,8 +233,8 @@ function AccuracyCard({ row }: { row: AccuracyRow }) {
   );
 }
 
-// ── シグナル行（デスクトップ テーブル用）────────────────────────────────
-function SignalRow({ s }: { s: Signal }) {
+// ── シグナル行（デスクトップ テーブル用）────────────────────────────────────
+function SignalRow({ s, activeFilter }: { s: Signal; activeFilter: SignalFilter }) {
   const [open, setOpen] = useState(false);
   const keyFactors: string[] = (() => {
     try { return s.key_factors ? JSON.parse(s.key_factors) : []; } catch { return []; }
@@ -181,7 +302,7 @@ function SignalRow({ s }: { s: Signal }) {
   );
 }
 
-// ── シグナルカード（モバイルファースト）─────────────────────────────────
+// ── シグナルカード（モバイルファースト）──────────────────────────────────────
 function SignalCard({ s }: { s: Signal }) {
   const [open, setOpen] = useState(false);
   const keyFactors: string[] = (() => {
@@ -277,18 +398,22 @@ function SignalCard({ s }: { s: Signal }) {
   );
 }
 
-// ── メインページ ──────────────────────────────────────────────────────────
+// ── メインページ ──────────────────────────────────────────────────────────────
 export default function HomePage() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("ALL");
-  const [minProb, setMinProb] = useState(60);
+  const [styleTab, setStyleTab] = useState<StyleTab>("daytrade");
+  const [minProb, setMinProb] = useState(65);
   const [csvLoading, setCsvLoading] = useState(false);
+
+  const styleConfig = STYLE_TABS.find(t => t.id === styleTab)!;
+  const signalFilter = styleConfig.signalFilter;
+  const isPro = user?.plan === "pro";
 
   // hooks は早期 return より前に置く（React の rules of hooks）
   const { data: signalData, isLoading: sigLoading } = useSWR(
-    user ? ["signals", tab] : null,
-    () => getLatestSignals(tab === "ALL" ? undefined : tab),
+    user ? ["signals", signalFilter] : null,
+    () => getLatestSignals(signalFilter === "ALL" ? undefined : signalFilter),
     { refreshInterval: 60_000 },
   );
 
@@ -299,13 +424,20 @@ export default function HomePage() {
   const handleCsvDownload = async () => {
     setCsvLoading(true);
     try {
-      await downloadSignalsCsv(tab === "ALL" ? undefined : tab, 30);
+      await downloadSignalsCsv(signalFilter === "ALL" ? undefined : signalFilter, 30);
       toast("CSVをダウンロードしました", "success");
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : "CSVダウンロードに失敗しました", "error");
     } finally {
       setCsvLoading(false);
     }
+  };
+
+  // スタイルタブ変更時に確度フィルターをリセット
+  const handleStyleChange = (next: StyleTab) => {
+    const cfg = STYLE_TABS.find(t => t.id === next)!;
+    setStyleTab(next);
+    setMinProb(cfg.defaultMinProb);
   };
 
   if (!loading && !user) return <LandingPage />;
@@ -318,17 +450,16 @@ export default function HomePage() {
     (s: Signal) => signalProb(s.signal, s.up_probability) * 100 >= minProb,
   );
 
-  // 最新シグナルの日付（ライブドット用）
   const latestDate = filtered[0]?.Date ?? null;
+  const isLocked = styleConfig.proOnly && !isPro;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* ── ヘッダー ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2.5 mb-0.5">
-            <h1 className="text-2xl font-bold tracking-tight">AIシグナル一覧</h1>
-            {/* ライブドット + 日付バッジ */}
+            <h1 className="text-2xl font-bold tracking-tight">AIシグナル</h1>
             {!sigLoading && filtered.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <span className="live-dot" />
@@ -337,7 +468,6 @@ export default function HomePage() {
                 )}
               </div>
             )}
-            {/* 件数バッジ */}
             {!sigLoading && filtered.length > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 text-xs font-bold">
                 {filtered.length}件
@@ -367,7 +497,7 @@ export default function HomePage() {
         <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3 text-sm">
           <div>
             <p className="font-semibold text-amber-800 dark:text-amber-300">無料プランは上位 10 件まで</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Pro プランで全件表示・CSV・メールアラート</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Pro プランで全件表示・CSV・スイング/長期/信用売りモード</p>
           </div>
           <Link
             href="/billing"
@@ -378,38 +508,42 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ── タブ + フィルター ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg">
-          {(["ALL", "UP", "DOWN"] as Tab[]).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                tab === t
-                  ? "bg-white dark:bg-slate-700 shadow-sm text-gray-900 dark:text-white"
-                  : "text-gray-500 hover:text-gray-700 dark:text-slate-400"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+      {/* ── 投資スタイルタブ ── */}
+      <div className="space-y-3">
+        <StyleTabBar current={styleTab} onChange={handleStyleChange} isPro={isPro} />
+
+        {/* スタイル説明ヒント */}
+        <div className={`flex items-start gap-2 px-3.5 py-2.5 rounded-xl text-xs ${
+          styleTab === "short"
+            ? "bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800/40"
+            : "bg-brand-50 dark:bg-brand-900/10 text-brand-700 dark:text-brand-300 border border-brand-100 dark:border-brand-800/40"
+        }`}>
+          <Lightbulb size={13} className="shrink-0 mt-0.5" />
+          <span>{styleConfig.hint}</span>
         </div>
-        <ProbabilityFilter value={minProb} onChange={setMinProb} />
-        {user?.plan === "pro" && (
-          <button
-            onClick={handleCsvDownload}
-            disabled={csvLoading}
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400 border border-brand-200 dark:border-brand-700 hover:bg-brand-100 dark:hover:bg-brand-900/30 transition-colors disabled:opacity-50"
-          >
-            <Download size={13} />
-            {csvLoading ? "処理中..." : "CSV"}
-          </button>
-        )}
       </div>
 
-      {/* ── シグナル一覧 ── */}
-      {sigLoading ? (
+      {/* ── フィルター行 ── */}
+      {!isLocked && (
+        <div className="flex flex-wrap items-center gap-3">
+          <ProbabilityFilter value={minProb} onChange={setMinProb} />
+          {isPro && (
+            <button
+              onClick={handleCsvDownload}
+              disabled={csvLoading}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400 border border-brand-200 dark:border-brand-700 hover:bg-brand-100 dark:hover:bg-brand-900/30 transition-colors disabled:opacity-50"
+            >
+              <Download size={13} />
+              {csvLoading ? "処理中..." : "CSV"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── コンテンツエリア ── */}
+      {isLocked ? (
+        <ProLockedOverlay label={styleConfig.label} />
+      ) : sigLoading ? (
         <>
           <div className="md:hidden space-y-3">
             {[...Array(5)].map((_, i) => <SignalCardSkeleton key={i} />)}
@@ -418,7 +552,7 @@ export default function HomePage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-slate-800 text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wide">
                 <tr>
-                  {["銘柄", "日付", "シグナル", tab === "DOWN" ? "下落確率" : "上昇確率", "実績", "的中", "AI"].map(h => (
+                  {["銘柄", "日付", "シグナル", signalFilter === "DOWN" ? "下落確率" : "上昇確率", "実績", "的中", "AI"].map(h => (
                     <th key={h} className="px-4 py-3 text-left">{h}</th>
                   ))}
                 </tr>
@@ -456,7 +590,7 @@ export default function HomePage() {
                   <th className="px-4 py-3 text-left">銘柄</th>
                   <th className="px-4 py-3 text-left">日付</th>
                   <th className="px-4 py-3 text-center">シグナル</th>
-                  <th className="px-4 py-3 text-left">{tab === "DOWN" ? "下落確率" : "上昇確率"}</th>
+                  <th className="px-4 py-3 text-left">{signalFilter === "DOWN" ? "下落確率" : "上昇確率"}</th>
                   <th className="px-4 py-3 text-right">実績</th>
                   <th className="px-4 py-3 text-center">的中</th>
                   <th className="px-4 py-3 text-center">AI</th>
@@ -464,7 +598,7 @@ export default function HomePage() {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-700/60 bg-white dark:bg-slate-800/40">
                 {filtered.map((s: Signal) => (
-                  <SignalRow key={`${s.Code}-${s.Date}`} s={s} />
+                  <SignalRow key={`${s.Code}-${s.Date}`} s={s} activeFilter={signalFilter} />
                 ))}
               </tbody>
             </table>

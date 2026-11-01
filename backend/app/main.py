@@ -94,7 +94,14 @@ async def health_check_legacy():
 
 
 # METRICS_TOKEN が設定されている場合は Bearer 認証を要求
+# 本番環境（ENV=production）では未設定時に起動を拒否
 _METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
+_ENV = os.getenv("ENV", "development")
+if _ENV == "production" and not _METRICS_TOKEN:
+    raise RuntimeError(
+        "METRICS_TOKEN must be set in production. "
+        "Set a strong random token in your .env or environment variables."
+    )
 
 @app.get("/metrics")
 async def prometheus_metrics(request: Request):
