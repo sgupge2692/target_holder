@@ -49,7 +49,7 @@ Vercel + Render + Supabase + Upstash の完全無料構成
    ADMIN_EMAILS=自分のメールアドレス
    FRONTEND_URL=https://your-app.vercel.app（後で更新）
    ```
-5. デプロイ完了後、URL をメモ: `https://stock-intelligence-api.onrender.com`
+5. デプロイ完了後、URL をメモ: `https://kabumi-api.onrender.com`
 
 ### 4. Vercel でフロントエンドをデプロイ
 
@@ -58,7 +58,7 @@ Vercel + Render + Supabase + Upstash の完全無料構成
 3. **Root Directory**: `frontend`
 4. Environment Variables:
    ```
-   NEXT_PUBLIC_API_URL=https://stock-intelligence-api.onrender.com
+   NEXT_PUBLIC_API_URL=https://kabumi-api.onrender.com
    NEXT_PUBLIC_SITE_URL=https://your-app.vercel.app
    ```
 5. デプロイ → URLをメモ
@@ -75,7 +75,7 @@ Render ダッシュボード → Environment → `FRONTEND_URL` を Vercel のUR
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://stock-intelligence-api.onrender.com/api/:path*"
+      "destination": "https://kabumi-api.onrender.com/api/:path*"
     }
   ]
 }
@@ -119,5 +119,5 @@ ML_ENABLED=true
 対策として UptimeRobot（無料）で5分おきにヘルスチェックを設定:
 - https://uptimerobot.com
 - Monitor Type: HTTP(s)
-- URL: `https://stock-intelligence-api.onrender.com/api/health`
+- URL: `https://kabumi-api.onrender.com/api/health`
 - Monitoring Interval: 5 minutes

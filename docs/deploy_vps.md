@@ -31,8 +31,8 @@ docker compose version
 ## 2. リポジトリのクローン
 
 ```bash
-git clone https://github.com/YOUR_ORG/stock-intelligence.git /opt/stock-intelligence
-cd /opt/stock-intelligence
+git clone https://github.com/YOUR_ORG/kabumi.git /opt/kabumi
+cd /opt/kabumi
 ```
 
 ---
@@ -79,7 +79,7 @@ docker run --rm \
   --agree-tos --non-interactive
 
 # nginx.conf の server_name を自分のドメインに変更
-nano nginx/nginx.conf   # stock-intelligence.app → your-domain.com
+nano nginx/nginx.conf   # kabumi.app → your-domain.com
 ```
 
 ---

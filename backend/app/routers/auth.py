@@ -20,7 +20,7 @@ from app.notifications import send_email, render_welcome_email
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-SITE_URL = os.getenv("NEXT_PUBLIC_SITE_URL", "https://stock-intelligence.app")
+SITE_URL = os.getenv("NEXT_PUBLIC_SITE_URL", "https://kabumi.app")
 RESET_TOKEN_EXPIRE_HOURS = 1
 
 
@@ -90,7 +90,7 @@ async def register(
     background_tasks.add_task(
         send_email,
         to=body.email,
-        subject="【Stock Intelligence】ご登録ありがとうございます",
+        subject="【かぶみ】ご登録ありがとうございます",
         html=html,
     )
 
@@ -151,7 +151,7 @@ async def request_password_reset(
         background_tasks.add_task(
             send_email,
             to=body.email,
-            subject="【Stock Intelligence】パスワードリセット",
+            subject="【かぶみ】パスワードリセット",
             html=html,
         )
 
@@ -200,7 +200,7 @@ def _render_reset_email(reset_url: str) -> str:
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,sans-serif;">
 <div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);">
   <div style="background:#0f172a;padding:28px 32px;">
-    <h1 style="color:#fff;margin:0;font-size:20px;">📈 <span style="color:#22c55e;">Stock Intelligence</span></h1>
+    <h1 style="color:#fff;margin:0;font-size:20px;">📈 <span style="color:#22c55e;">かぶみ</span></h1>
   </div>
   <div style="padding:32px;">
     <h2 style="margin-top:0;color:#0f172a;">パスワードリセット</h2>

@@ -36,10 +36,11 @@ function AccuracyBadge({ row }: { row: AccuracyRow }) {
 // ── シグナルプレビューモック ────────────────────────────────────
 function SignalPreview() {
   const items = [
-    { code: "7203", name: "トヨタ自動車", prob: 84.2, signal: "UP" },
+    { code: "7203", name: "トヨタ自動車",  prob: 84.2, signal: "UP" },
     { code: "9984", name: "ソフトバンクG", prob: 79.5, signal: "UP" },
-    { code: "6758", name: "ソニーグループ", prob: 73.1, signal: "UP" },
-    { code: "6367", name: "ダイキン工業", prob: 71.8, signal: "UP" },
+    { code: "6758", name: "ソニーグループ",prob: 73.1, signal: "UP" },
+    { code: "8306", name: "三菱UFJ",       prob: 78.4, signal: "DOWN" },
+    { code: "6367", name: "ダイキン工業",  prob: 71.8, signal: "DOWN" },
   ];
   return (
     <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl overflow-hidden">
@@ -48,7 +49,7 @@ function SignalPreview() {
         <span className="w-3 h-3 rounded-full bg-red-400" />
         <span className="w-3 h-3 rounded-full bg-yellow-400" />
         <span className="w-3 h-3 rounded-full bg-green-400" />
-        <span className="ml-2 text-xs text-gray-400 font-mono">stock-intelligence.app</span>
+        <span className="ml-2 text-xs text-gray-400 font-mono">kabumi.app</span>
         <span className="ml-auto flex items-center gap-1.5">
           <span className="live-dot" />
           <span className="text-xs text-gray-400">LIVE</span>
@@ -194,8 +195,8 @@ export function LandingPage() {
 
           <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 dark:text-white leading-[1.15]">
             AIが毎朝、<br />
-            <span className="text-brand-600 dark:text-brand-400">翌日の上昇銘柄</span>を<br />
-            自動で選ぶ
+            <span className="text-brand-600 dark:text-brand-400">上がる・下がる</span>を<br />
+            予測して届ける
           </h1>
 
           <p className="text-base text-gray-500 dark:text-slate-400 leading-relaxed">

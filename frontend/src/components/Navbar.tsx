@@ -69,7 +69,7 @@ export function Navbar() {
           {/* ロゴ */}
           <Link href="/" onClick={close} className="flex items-center gap-2 font-bold text-lg text-brand-600 dark:text-brand-400 shrink-0">
             <TrendingUp size={20} />
-            <span>Stock Intelligence</span>
+            <span>かぶみ</span>
           </Link>
 
           {/* デスクトップナビ */}

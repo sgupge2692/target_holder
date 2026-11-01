@@ -40,7 +40,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://stock:stock@localhost:5432/stockdb")
-SITE_URL = os.getenv("NEXT_PUBLIC_SITE_URL", "https://stock-intelligence.app")
+SITE_URL = os.getenv("NEXT_PUBLIC_SITE_URL", "https://kabumi.app")
 # 1送信ごとのウェイト（レート制限対策: 0.1秒）
 SEND_INTERVAL = float(os.getenv("EMAIL_SEND_INTERVAL", "0.1"))
 # 1ユーザーへのリトライ回数

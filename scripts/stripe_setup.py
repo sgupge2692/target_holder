@@ -3,7 +3,7 @@
 Stripe セットアップスクリプト
 ================================
 実行すると以下を自動で行います:
-  1. Stripe に Product (Stock Intelligence Pro) を作成
+  1. Stripe に Product (かぶみ Pro) を作成
   2. 月額 ¥2,980 の Price を作成
   3. プロジェクトルートの .env を更新 (STRIPE_PRICE_ID_PRO を書き込み)
   4. Stripe CLI の webhook forward コマンドを表示
@@ -66,7 +66,7 @@ mode_label = "TEST" if is_test else "LIVE"
 print(f"[INFO] Stripe {mode_label} モードで接続します")
 
 # ── 既存 Product の確認 ───────────────────────────────────────
-PRODUCT_NAME = "Stock Intelligence Pro"
+PRODUCT_NAME = "かぶみ Pro"
 PRICE_AMOUNT = 2980          # 円
 PRICE_CURRENCY = "jpy"
 PRICE_INTERVAL = "month"

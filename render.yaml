@@ -1,7 +1,7 @@
 services:
   # ── バックエンド API ──────────────────────────────────────────────────
   - type: web
-    name: stock-intelligence-api
+    name: kabumi-api
     runtime: python
     region: singapore  # 日本に近いリージョン
     plan: free

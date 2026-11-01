@@ -1,4 +1,4 @@
-# ── Stock Intelligence Makefile ─────────────────────────────────────────────
+# ── かぶみ (Kabumi) Makefile ─────────────────────────────────────────────
 .PHONY: help dev prod-up prod-down prod-logs migrate test lint build
 
 help:  ## このヘルプを表示
@@ -66,7 +66,7 @@ build:  ## 全 Docker イメージをビルド（プッシュなし）
 
 # ── デプロイ補助 ─────────────────────────────────────────────────────────────
 ssl-init:  ## Let's Encrypt 証明書の初回取得 (ドメインを引数で指定)
-	@echo "Usage: make ssl-init DOMAIN=stock-intelligence.app EMAIL=admin@example.com"
+	@echo "Usage: make ssl-init DOMAIN=kabumi.app EMAIL=admin@example.com"
 	docker run --rm \
 	  -v $(PWD)/nginx/ssl:/etc/letsencrypt \
 	  -v $(PWD)/nginx/certbot-www:/var/www/certbot \

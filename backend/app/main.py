@@ -32,7 +32,7 @@ if SENTRY_DSN:
     )
 
 app = FastAPI(
-    title="Stock Intelligence API",
+    title="かぶみ API",
     description="株価予測・企業要約サービスのAPI",
     version="0.3.0",
     # 本番では docs/redoc を無効化

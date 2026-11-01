@@ -15,8 +15,8 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "smtp")  # sendgrid | smtp
-EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@stock-intelligence.app")
-EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Stock Intelligence")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@kabumi.app")
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "かぶみ")
 
 # SMTP 設定
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
@@ -98,7 +98,7 @@ def _base_template(content: str) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Stock Intelligence</title>
+<title>かぶみ</title>
 <style>
   body {{ margin:0; padding:0; background:#f1f5f9; font-family:-apple-system,sans-serif; }}
   .wrap {{ max-width:600px; margin:40px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,.08); }}
@@ -118,10 +118,10 @@ def _base_template(content: str) -> str:
 </head>
 <body>
 <div class="wrap">
-  <div class="header"><h1>📈 <span>Stock Intelligence</span></h1></div>
+  <div class="header"><h1>📈 <span>かぶみ</span></h1></div>
   <div class="body">{content}</div>
   <div class="footer">
-    このメールはStock Intelligenceから自動送信されています。<br>
+    このメールはかぶみから自動送信されています。<br>
     配信停止は <a href="{{unsubscribe_url}}" style="color:#94a3b8;">こちら</a>
   </div>
 </div>
@@ -133,7 +133,7 @@ def render_daily_signal_email(
     date: str,
     signals: list[dict],
     accuracy_pct: Optional[float] = None,
-    site_url: str = "https://stock-intelligence.app",
+    site_url: str = "https://kabumi.app",
 ) -> str:
     """日次シグナルメール HTML を生成"""
     rows = ""
@@ -165,13 +165,13 @@ def render_daily_signal_email(
 
 def render_welcome_email(
     username: str,
-    site_url: str = "https://stock-intelligence.app",
+    site_url: str = "https://kabumi.app",
 ) -> str:
     """会員登録完了メール HTML を生成"""
     content = f"""
 <h2 style="margin-top:0;color:#0f172a;">ご登録ありがとうございます！</h2>
 <p>こんにちは、<strong>{username}</strong> さん。</p>
-<p>Stock Intelligence へようこそ。AIが毎日、翌日上昇が期待される銘柄をシグナルとしてお届けします。</p>
+<p>かぶみ へようこそ。AIが毎日、翌日上昇が期待される銘柄をシグナルとしてお届けします。</p>
 <h3 style="color:#0f172a;">はじめ方</h3>
 <ol style="color:#475569;line-height:2;">
   <li>ダッシュボードで本日のシグナルを確認する</li>
@@ -188,7 +188,7 @@ def render_welcome_email(
 
 def render_upgrade_reminder_email(
     username: str,
-    site_url: str = "https://stock-intelligence.app",
+    site_url: str = "https://kabumi.app",
 ) -> str:
     """Pro アップグレード促進メール HTML を生成"""
     content = f"""

@@ -1,4 +1,4 @@
-# Stock Intelligence
+# かぶみ
 
 日本株特化のAI株価予測・企業要約サービス
 
@@ -13,8 +13,8 @@
 
 ```bash
 # 1. リポジトリをクローン
-git clone https://github.com/yourrepo/stock-intelligence
-cd stock-intelligence
+git clone https://github.com/YOUR_ORG/kabumi.git /opt/kabumi
+cd kabumi
 
 # 2. 環境変数を設定
 cp .env.example .env
@@ -65,7 +65,7 @@ Self-hosted runnerの設定:
 ## ディレクトリ構成
 
 ```
-stock-intelligence/
+kabumi/
 ├── backend/        FastAPI バックエンド
 ├── frontend/       Next.js フロントエンド
 ├── ml/             機械学習パイプライン

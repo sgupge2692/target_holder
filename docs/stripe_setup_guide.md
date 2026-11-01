@@ -30,7 +30,7 @@ python scripts/stripe_setup.py
 ```
 
 実行すると:
-- Stripe に **Stock Intelligence Pro**（¥2,980/月）を作成
+- Stripe に **かぶみ Pro**（¥2,980/月）を作成
 - `.env` の `STRIPE_PRICE_ID_PRO` を自動更新
 
 ---
