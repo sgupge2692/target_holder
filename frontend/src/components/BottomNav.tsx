@@ -5,17 +5,16 @@ import { Home, BarChart2, Bookmark, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 const NAV_ITEMS = [
-  { href: "/",         icon: Home,      label: "シグナル" },
-  { href: "/backtest", icon: BarChart2, label: "実績"     },
-  { href: "/watchlist",icon: Bookmark,  label: "ウォッチ"  },
-  { href: "/account",  icon: User,      label: "アカウント" },
+  { href: "/",          icon: Home,      label: "シグナル" },
+  { href: "/backtest",  icon: BarChart2, label: "実績"     },
+  { href: "/watchlist", icon: Bookmark,  label: "ウォッチ"  },
+  { href: "/account",   icon: User,      label: "アカウント" },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
   const { user } = useAuth();
 
-  // 未ログインやauth画面では非表示
   if (!user) return null;
 
   return (
@@ -29,7 +28,12 @@ export function BottomNav() {
               href={href}
               className={`bottom-nav-item ${active ? "active" : ""}`}
             >
-              <Icon size={22} strokeWidth={active ? 2.5 : 1.8} />
+              <Icon
+                size={20}
+                strokeWidth={active ? 2.5 : 1.8}
+                className="transition-transform duration-150"
+                style={active ? { transform: "scale(1.1)" } : {}}
+              />
               <span>{label}</span>
             </Link>
           );

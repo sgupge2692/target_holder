@@ -11,13 +11,16 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   return (
     <Link
       href={href}
-      className={`transition-colors font-medium text-sm ${
+      className={`relative py-1 text-sm font-medium transition-colors ${
         active
           ? "text-brand-600 dark:text-brand-400"
-          : "text-gray-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400"
+          : "text-surface-500 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100"
       }`}
     >
       {children}
+      {active && (
+        <span className="absolute -bottom-0.5 left-0 right-0 h-0.5 rounded-full bg-brand-500" />
+      )}
     </Link>
   );
 }
@@ -36,7 +39,7 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 30);
+    const onScroll = () => setScrolled(window.scrollY > 10);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -49,20 +52,26 @@ export function Navbar() {
   };
 
   return (
-    <nav className={`sticky top-0 z-50 transition-all duration-200 ${
-      scrolled
-        ? "border-b border-gray-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm"
-        : "border-b border-transparent bg-white dark:bg-slate-900"
+    <nav className={`sticky top-0 z-50 transition-all duration-300 ${
+      scrolled ? "navbar-glass shadow-sm" : "bg-transparent"
     }`}>
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
 
         {/* ロゴ */}
-        <Link href="/" className="flex items-center gap-1.5 font-black text-xl tracking-tight text-emerald-600 dark:text-emerald-400 shrink-0">
-          <span>かぶみ</span>
+        <Link
+          href="/"
+          className="flex items-center gap-2 shrink-0 group"
+        >
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-sm group-hover:shadow-glow-green transition-shadow">
+            <span className="text-white text-xs font-black leading-none">か</span>
+          </div>
+          <span className="font-black text-lg tracking-tight text-surface-900 dark:text-white">
+            かぶみ
+          </span>
         </Link>
 
-        {/* デスクトップナビ（md以上のみ） */}
-        <div className="hidden md:flex items-center gap-5">
+        {/* デスクトップナビ（md以上のみ）*/}
+        <div className="hidden md:flex items-center gap-6">
           {user ? (
             <>
               <NavLink href="/">シグナル</NavLink>
@@ -85,29 +94,32 @@ export function Navbar() {
         </div>
 
         {/* 右側アクション */}
-        <div className="flex items-center gap-2">
-          {/* テーマ切替 */}
+        <div className="flex items-center gap-1.5">
+          {/* テーマトグル */}
           <button
             onClick={toggleDark}
-            className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
             aria-label="テーマ切替"
           >
-            {dark ? <Sun size={17} /> : <Moon size={17} />}
+            {dark
+              ? <Sun size={16} strokeWidth={1.8} />
+              : <Moon size={16} strokeWidth={1.8} />
+            }
           </button>
 
           {!loading && (
             user ? (
-              <div className="hidden md:flex items-center gap-3">
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wider ${
+              <div className="hidden md:flex items-center gap-2.5">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wider uppercase ${
                   user.plan === "pro"
-                    ? "bg-emerald-500 text-white"
-                    : "bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-slate-300"
+                    ? "bg-brand-500 text-white"
+                    : "bg-surface-100 dark:bg-surface-800 text-surface-500 dark:text-surface-400"
                 }`}>
-                  {user.plan === "pro" ? "PRO" : "FREE"}
+                  {user.plan}
                 </span>
                 <button
                   onClick={signOut}
-                  className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 transition-colors"
+                  className="text-xs text-surface-400 hover:text-surface-700 dark:hover:text-surface-200 transition-colors"
                 >
                   ログアウト
                 </button>
@@ -116,13 +128,13 @@ export function Navbar() {
               <div className="flex items-center gap-2">
                 <Link
                   href="/auth"
-                  className="hidden md:block text-sm text-gray-600 dark:text-slate-300 hover:text-emerald-600 transition-colors"
+                  className="hidden md:block text-sm text-surface-500 dark:text-surface-400 hover:text-surface-800 dark:hover:text-surface-100 transition-colors"
                 >
                   ログイン
                 </Link>
                 <Link
                   href="/auth"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-xl text-sm font-bold transition-colors"
+                  className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-1.5 rounded-xl text-sm font-bold transition-colors shadow-sm"
                 >
                   無料で始める
                 </Link>
@@ -130,6 +142,7 @@ export function Navbar() {
             )
           )}
         </div>
+
       </div>
     </nav>
   );

@@ -2,123 +2,160 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { --bg: #f9fafb; --fg: #111827; }
-.dark { --bg: #0f172a; --fg: #f1f5f9; }
+/* ── デザイントークン ────────────────────────────────────────────────────── */
+:root {
+  --bg:           #f8fafc;
+  --bg-card:      #ffffff;
+  --fg:           #0f172a;
+  --fg-muted:     #64748b;
+  --border:       #e2e8f0;
+  --brand:        #16a34a;
+  --brand-light:  #dcfce7;
+  --danger:       #e11d48;
+  --danger-light: #ffe4e6;
 
-body { background: var(--bg); color: var(--fg); }
+  /* グラデーション */
+  --grad-up:   linear-gradient(135deg, #16a34a11 0%, transparent 60%);
+  --grad-down: linear-gradient(135deg, #e11d4811 0%, transparent 60%);
 
-/* ── スクロールバー（細くシンプルに） ───────────── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
-.dark ::-webkit-scrollbar-thumb { background: #334155; }
+  /* シャドウ */
+  --shadow-card:      0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-card-hover:0 8px 24px rgba(0,0,0,0.09), 0 2px 8px rgba(0,0,0,0.05);
+  --shadow-nav:       0 1px 0 rgba(0,0,0,0.05);
+  --shadow-bottom-nav:0 -1px 0 rgba(0,0,0,0.06);
+}
 
-/* ── フォーカスリング ─────────────────────────── */
+.dark {
+  --bg:           #080f1e;
+  --bg-card:      #0f1a2e;
+  --fg:           #f1f5f9;
+  --fg-muted:     #64748b;
+  --border:       #1e2d45;
+  --brand:        #4ade80;
+  --brand-light:  #052e16;
+  --danger:       #fb7185;
+  --danger-light: #881337;
+
+  --shadow-card:      0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-card-hover:0 8px 24px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-nav:       0 1px 0 rgba(0,0,0,0.3);
+  --shadow-bottom-nav:0 -1px 0 rgba(0,0,0,0.3);
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── スクロールバー ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar            { width: 5px; height: 5px; }
+::-webkit-scrollbar-track      { background: transparent; }
+::-webkit-scrollbar-thumb      { background: #cbd5e1; border-radius: 9999px; }
+.dark ::-webkit-scrollbar-thumb{ background: #1e2d45; }
+
+/* スクロールバー非表示ユーティリティ */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── フォーカスリング ────────────────────────────────────────────────────── */
 :focus-visible {
   outline: 2px solid #22c55e;
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
-/* ── トーストアニメーション ───────────────────── */
-@keyframes slide-up {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.animate-slide-up {
-  animation: slide-up 0.2s ease-out forwards;
-}
-
-/* ── スケルトンシマー ─────────────────────────── */
-@keyframes shimmer {
-  from { background-position: -200% 0; }
-  to   { background-position: 200% 0; }
-}
+/* ── スケルトンシマー ────────────────────────────────────────────────────── */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    #e5e7eb 25%,
-    #f3f4f6 50%,
-    #e5e7eb 75%
-  );
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite linear;
-  border-radius: 0.375rem;
+  border-radius: 8px;
 }
 .dark .skeleton {
-  background: linear-gradient(
-    90deg,
-    #1e293b 25%,
-    #334155 50%,
-    #1e293b 75%
-  );
+  background: linear-gradient(90deg, #1e2d45 25%, #263347 50%, #1e2d45 75%);
   background-size: 200% 100%;
 }
 
-/* ── シグナルカード hover ─────────────────────── */
-.signal-card {
-  transition: box-shadow 0.18s ease, transform 0.18s ease;
-}
-.signal-card:hover {
-  box-shadow: 0 6px 24px rgba(0,0,0,0.08);
-  transform: translateY(-2px);
-}
-.dark .signal-card:hover {
-  box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position:  200% 0; }
 }
 
-/* ── 確率バー ────────────────────────────────── */
+/* ── トーストアニメーション ──────────────────────────────────────────────── */
+.animate-slide-up {
+  animation: slide-up 0.22s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── ページフェードイン ──────────────────────────────────────────────────── */
+main > * {
+  animation: fade-in-page 0.28s cubic-bezier(0.16,1,0.3,1) both;
+}
+@keyframes fade-in-page {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── 確率バー ────────────────────────────────────────────────────────────── */
 .prob-bar-track {
-  height: 4px;
+  height: 6px;
   border-radius: 9999px;
-  background: #e5e7eb;
+  background: #e2e8f0;
   overflow: hidden;
 }
-.dark .prob-bar-track { background: #334155; }
+.dark .prob-bar-track { background: #1e2d45; }
 .prob-bar-fill {
   height: 100%;
   border-radius: 9999px;
-  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ── Live dot ────────────────────────────────── */
-@keyframes live-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
-  50%       { box-shadow: 0 0 0 5px rgba(34,197,94,0); }
-}
+/* ── Live dot ─────────────────────────────────────────────────────────────── */
 .live-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 9999px;
   background: #22c55e;
   animation: live-pulse 2s ease-in-out infinite;
 }
-
-/* ── ページ遷移フェードイン ──────────────────── */
-main > * {
-  animation: fade-in-page 0.3s ease-out both;
-}
-@keyframes fade-in-page {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(34,197,94,0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(34,197,94,0);   }
 }
 
-/* ── ボトムナビ（モバイルアプリ風）────────────── */
+/* ── ナビゲーションバー ──────────────────────────────────────────────────── */
+.navbar-glass {
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  background: rgba(248,250,252,0.88);
+  border-bottom: 1px solid rgba(226,232,240,0.7);
+}
+.dark .navbar-glass {
+  background: rgba(8,15,30,0.90);
+  border-bottom-color: rgba(30,45,69,0.8);
+}
+
+/* ── ボトムナビ ──────────────────────────────────────────────────────────── */
 .bottom-nav {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 50;
-  background: rgba(255,255,255,0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid #e5e7eb;
-  padding-bottom: env(safe-area-inset-bottom);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  background: rgba(248,250,252,0.92);
+  border-top: 1px solid rgba(226,232,240,0.7);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .dark .bottom-nav {
-  background: rgba(15,23,42,0.95);
-  border-top-color: #1e293b;
+  background: rgba(8,15,30,0.94);
+  border-top-color: rgba(30,45,69,0.8);
 }
 .bottom-nav-item {
   display: flex;
@@ -126,40 +163,68 @@ main > * {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 8px 0;
+  padding: 8px 4px;
   font-size: 10px;
   font-weight: 600;
-  color: #9ca3af;
-  transition: color 0.15s ease;
+  color: #94a3b8;
+  transition: color 0.15s ease, transform 0.15s ease;
   letter-spacing: 0.01em;
   flex: 1;
   min-height: 56px;
 }
-.dark .bottom-nav-item { color: #64748b; }
-.bottom-nav-item.active { color: #16a34a; }
-.dark .bottom-nav-item.active { color: #4ade80; }
-.bottom-nav-item:hover { color: #16a34a; }
+.dark .bottom-nav-item           { color: #475569; }
+.bottom-nav-item.active          { color: #16a34a; }
+.dark .bottom-nav-item.active    { color: #4ade80; }
+.bottom-nav-item:active          { transform: scale(0.9); }
 
-/* ── メインコンテンツのボトムパディング（ボトムナビ分）── */
+/* アクティブ時インジケーター（上端バー）*/
+.bottom-nav-item.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 2px;
+  border-radius: 9999px;
+  background: #16a34a;
+}
+.dark .bottom-nav-item.active::before { background: #4ade80; }
+
+.bottom-nav-item { position: relative; }
+
+/* ── メインのボトムパディング ─────────────────────────────────────────────── */
 .has-bottom-nav {
-  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
 }
 
-/* ── シグナルカード（モバイルファースト）────────── */
+/* ── シグナルカード ──────────────────────────────────────────────────────── */
 .signal-card-v2 {
-  background: white;
+  background: var(--bg-card);
   border-radius: 16px;
-  border: 1px solid #f1f5f9;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: box-shadow 0.18s ease, transform 0.18s ease;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
 }
-.dark .signal-card-v2 {
-  background: #1e293b;
-  border-color: #334155;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+.signal-card-v2:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
 }
-.signal-card-v2:active {
-  transform: scale(0.985);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+.dark .signal-card-v2:hover { border-color: #263347; }
+.signal-card-v2:active { transform: scale(0.985); }
+
+/* ── グラス効果カード ─────────────────────────────────────────────────────── */
+.glass-card {
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.8);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+}
+.dark .glass-card {
+  background: rgba(15,26,46,0.75);
+  border-color: rgba(30,45,69,0.6);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
 }
