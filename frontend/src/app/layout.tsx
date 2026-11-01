@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar";
+import { BottomNav } from "@/components/BottomNav";
 import { ToastProvider } from "@/components/Toast";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://kabumi.app";
@@ -52,7 +53,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-slate-100 font-sans antialiased">
         <ToastProvider>
           <Navbar />
-          <main className="max-w-6xl mx-auto px-4 py-8">{children}</main>
+          <main className="max-w-6xl mx-auto px-4 py-6 has-bottom-nav md:pb-8">{children}</main>
+          <BottomNav />
         </ToastProvider>
       </body>
     </html>

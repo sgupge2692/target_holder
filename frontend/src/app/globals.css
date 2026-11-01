@@ -102,3 +102,64 @@ main > * {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── ボトムナビ（モバイルアプリ風）────────────── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid #e5e7eb;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.dark .bottom-nav {
+  background: rgba(15,23,42,0.95);
+  border-top-color: #1e293b;
+}
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  transition: color 0.15s ease;
+  letter-spacing: 0.01em;
+  flex: 1;
+  min-height: 56px;
+}
+.dark .bottom-nav-item { color: #64748b; }
+.bottom-nav-item.active { color: #16a34a; }
+.dark .bottom-nav-item.active { color: #4ade80; }
+.bottom-nav-item:hover { color: #16a34a; }
+
+/* ── メインコンテンツのボトムパディング（ボトムナビ分）── */
+.has-bottom-nav {
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+}
+
+/* ── シグナルカード（モバイルファースト）────────── */
+.signal-card-v2 {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+  overflow: hidden;
+}
+.dark .signal-card-v2 {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.signal-card-v2:active {
+  transform: scale(0.985);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}

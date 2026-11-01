@@ -181,63 +181,89 @@ function SignalRow({ s }: { s: Signal }) {
   );
 }
 
-// ── シグナルカード（モバイル用）──────────────────────────────────────────
+// ── シグナルカード（モバイルファースト）─────────────────────────────────
 function SignalCard({ s }: { s: Signal }) {
   const [open, setOpen] = useState(false);
   const keyFactors: string[] = (() => {
     try { return s.key_factors ? JSON.parse(s.key_factors) : []; } catch { return []; }
   })();
+  const isDown = s.signal === "DOWN";
+  const conf = Math.round(signalProb(s.signal, s.up_probability) * 100);
 
   return (
-    <div className="signal-card rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <Link href={`/stocks/${s.Code}`} className="font-semibold text-gray-900 dark:text-white hover:text-brand-600 transition-colors">
-            {s.company_name ?? s.Code}
-          </Link>
-          <div className="text-xs text-gray-400 mt-0.5">{s.Code} · {s.Date}</div>
+    <div className="signal-card-v2">
+      <Link href={`/stocks/${s.Code}`} className="block p-4 active:bg-gray-50 dark:active:bg-slate-700/50 transition-colors">
+        {/* 上段: 銘柄名 + シグナルバッジ */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="min-w-0 pr-3">
+            <p className="font-bold text-base text-gray-900 dark:text-white leading-tight truncate">
+              {s.company_name ?? s.Code}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{s.Code} · {s.Date}</p>
+          </div>
+          <SignalBadge signal={s.signal} />
         </div>
-        <SignalBadge signal={s.signal} />
-      </div>
 
-      {/* 確率バー */}
-      <div className="my-2.5">
-        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 mb-1">
-          <span>{s.signal === "DOWN" ? "下落確率" : "上昇確率"}</span>
-        </div>
-        <ProbBar upProb={s.up_probability} signal={s.signal} />
-      </div>
-
-      {s.actual_return != null && (
-        <div className="flex items-center justify-between text-sm mt-2 pt-2 border-t border-gray-100 dark:border-slate-700">
-          <span className="text-xs text-gray-500 dark:text-slate-400">実績リターン</span>
-          <div className="flex items-center gap-2">
-            <span className={`font-mono font-bold text-sm ${s.actual_return >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-              {s.actual_return >= 0 ? "+" : ""}{(s.actual_return * 100).toFixed(2)}%
+        {/* 確率バー + 数値 */}
+        <div className="mb-3">
+          <div className="flex items-center justify-between text-xs text-gray-400 dark:text-slate-500 mb-1.5">
+            <span>{isDown ? "下落確率" : "上昇確率"}</span>
+            <span className={`font-mono font-black text-base ${isDown ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+              {conf}%
             </span>
-            {s.is_correct != null && (
-              <span className="text-base">{s.is_correct ? "✅" : "❌"}</span>
-            )}
+          </div>
+          <div className="prob-bar-track h-2">
+            <div
+              className={`prob-bar-fill h-2 ${isDown ? "bg-red-500" : conf >= 80 ? "bg-emerald-500" : conf >= 70 ? "bg-emerald-400" : "bg-amber-400"}`}
+              style={{ width: `${conf}%` }}
+            />
           </div>
         </div>
-      )}
+
+        {/* 実績リターン */}
+        {s.actual_return != null && (
+          <div className="flex items-center justify-between pt-2.5 border-t border-gray-100 dark:border-slate-700/60">
+            <span className="text-xs text-gray-400 dark:text-slate-500">実績リターン</span>
+            <div className="flex items-center gap-1.5">
+              <span className={`font-mono font-bold text-sm ${s.actual_return >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                {s.actual_return >= 0 ? "+" : ""}{(s.actual_return * 100).toFixed(2)}%
+              </span>
+              {s.is_correct != null && (
+                <span className="text-sm">{s.is_correct ? "✅" : "❌"}</span>
+              )}
+            </div>
+          </div>
+        )}
+      </Link>
 
       {s.explanation && (
         <>
           <button
             onClick={() => setOpen(v => !v)}
-            className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs text-brand-600 dark:text-brand-400 border border-brand-200 dark:border-brand-700 rounded-lg py-1.5 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors font-medium"
+            className={`w-full flex items-center justify-center gap-1.5 text-xs py-2.5 border-t font-semibold transition-colors ${
+              isDown
+                ? "border-red-100 dark:border-red-900/30 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10"
+                : "border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/10"
+            }`}
           >
-            <Lightbulb size={12} />
-            {open ? "AI説明を閉じる" : "AI説明を見る"}
+            <Lightbulb size={13} />
+            {open ? "閉じる" : "AI説明を見る"}
           </button>
           {open && (
-            <div className="mt-2 p-3 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-xs text-brand-900 dark:text-brand-200 leading-relaxed">
+            <div className={`px-4 py-3 text-xs leading-relaxed ${
+              isDown
+                ? "bg-red-50 dark:bg-red-900/10 text-red-900 dark:text-red-200"
+                : "bg-emerald-50 dark:bg-emerald-900/10 text-emerald-900 dark:text-emerald-200"
+            }`}>
               <p>{s.explanation}</p>
               {keyFactors.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {keyFactors.map((f, i) => (
-                    <span key={i} className="px-1.5 py-0.5 rounded-full bg-brand-100 dark:bg-brand-800 text-brand-700 dark:text-brand-300">
+                    <span key={i} className={`px-1.5 py-0.5 rounded-full text-xs ${
+                      isDown
+                        ? "bg-red-100 dark:bg-red-800/40 text-red-700 dark:text-red-300"
+                        : "bg-emerald-100 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300"
+                    }`}>
                       {f}
                     </span>
                   ))}
