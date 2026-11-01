@@ -29,7 +29,7 @@ jobs:
 
       - name: Run backend tests
         env:
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           JWT_SECRET: test-secret
           STRIPE_SECRET_KEY: sk_test_dummy
           STRIPE_WEBHOOK_SECRET: whsec_dummy
@@ -111,6 +111,6 @@ jobs:
 
       - name: Run ML unit tests
         env:
-          DATABASE_URL: sqlite:////:memory:
+          DATABASE_URL: "sqlite:////:memory:"
         run: |
           pytest ml/tests/ -v --tb=short || true
