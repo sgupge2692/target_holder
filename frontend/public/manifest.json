@@ -1,0 +1,43 @@
+{
+  "name": "かぶみ – AI株価シグナル",
+  "short_name": "かぶみ",
+  "description": "AIが毎日、翌日の上昇・下落銘柄を予測して配信するサービス",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080f1e",
+  "theme_color": "#16a34a",
+  "orientation": "portrait-primary",
+  "lang": "ja",
+  "scope": "/",
+  "categories": ["finance", "utilities"],
+  "icons": [
+    { "src": "/icon-16.png",  "sizes": "16x16",   "type": "image/png" },
+    { "src": "/icon-32.png",  "sizes": "32x32",   "type": "image/png" },
+    { "src": "/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "シグナル一覧",
+      "url": "/",
+      "description": "本日のAIシグナルを確認",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "バックテスト",
+      "url": "/backtest",
+      "description": "AIの実績を確認",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "かぶみ – シグナル一覧"
+    }
+  ]
+}
