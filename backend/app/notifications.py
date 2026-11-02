@@ -6,6 +6,8 @@
   EMAIL_FROM               → 送信元アドレス
 """
 import os
+import hmac
+import hashlib
 import smtplib
 import logging
 from email.mime.multipart import MIMEMultipart
@@ -26,6 +28,22 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 
 # SendGrid 設定
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+
+# 配信停止トークン用シークレット（設定がなければフォールバック）
+UNSUBSCRIBE_SECRET = os.getenv("UNSUBSCRIBE_SECRET", "kabumi-unsub-secret-change-me")
+SITE_URL = os.getenv("NEXT_PUBLIC_SITE_URL", "https://kabumi.app")
+
+
+def make_unsubscribe_token(user_id: int, email: str) -> str:
+    """HMAC-SHA256 ベースの配信停止トークン生成（DB不要）"""
+    msg = f"{user_id}:{email}"
+    return hmac.new(UNSUBSCRIBE_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
+
+
+def make_unsubscribe_url(user_id: int, email: str, site_url: str = "") -> str:
+    token = make_unsubscribe_token(user_id, email)
+    base = site_url or SITE_URL
+    return f"{base}/api/notifications/unsubscribe?uid={user_id}&token={token}"
 
 
 def _send_via_smtp(to: str, subject: str, html: str) -> bool:
@@ -92,7 +110,12 @@ def send_email(to: str, subject: str, html: str) -> bool:
 
 # ─── テンプレート ───────────────────────────────────────────────────────────
 
-def _base_template(content: str) -> str:
+def _base_template(content: str, unsubscribe_url: str = "") -> str:
+    unsub_html = (
+        f'配信停止は <a href="{unsubscribe_url}" style="color:#94a3b8;">こちら</a>'
+        if unsubscribe_url
+        else "メール設定はダッシュボードから変更できます"
+    )
     return f"""<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -122,7 +145,7 @@ def _base_template(content: str) -> str:
   <div class="body">{content}</div>
   <div class="footer">
     このメールはかぶみから自動送信されています。<br>
-    配信停止は <a href="{{unsubscribe_url}}" style="color:#94a3b8;">こちら</a>
+    {unsub_html}
   </div>
 </div>
 </body>
@@ -134,6 +157,7 @@ def render_daily_signal_email(
     signals: list[dict],
     accuracy_pct: Optional[float] = None,
     site_url: str = "https://kabumi.app",
+    unsubscribe_url: str = "",
 ) -> str:
     """日次シグナルメール HTML を生成"""
     rows = ""
@@ -160,12 +184,13 @@ def render_daily_signal_email(
 </p>
 <a href="{site_url}" class="btn">シグナル詳細を見る →</a>
 """
-    return _base_template(content)
+    return _base_template(content, unsubscribe_url=unsubscribe_url)
 
 
 def render_welcome_email(
     username: str,
     site_url: str = "https://kabumi.app",
+    unsubscribe_url: str = "",
 ) -> str:
     """会員登録完了メール HTML を生成"""
     content = f"""
@@ -183,12 +208,13 @@ def render_welcome_email(
 </p>
 <a href="{site_url}" class="btn">ダッシュボードへ →</a>
 """
-    return _base_template(content)
+    return _base_template(content, unsubscribe_url=unsubscribe_url)
 
 
 def render_upgrade_reminder_email(
     username: str,
     site_url: str = "https://kabumi.app",
+    unsubscribe_url: str = "",
 ) -> str:
     """Pro アップグレード促進メール HTML を生成"""
     content = f"""
@@ -211,4 +237,4 @@ def render_upgrade_reminder_email(
 <p style="font-size:20px;font-weight:700;color:#0f172a;">月額 ¥2,980（税込）</p>
 <a href="{site_url}/billing" class="btn">今すぐProにアップグレード →</a>
 """
-    return _base_template(content)
+    return _base_template(content, unsubscribe_url=unsubscribe_url)

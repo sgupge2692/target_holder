@@ -30,7 +30,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "../.env"))
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy import select, text
 from app.models import User
-from app.notifications import send_email, render_daily_signal_email
+from app.notifications import send_email, render_daily_signal_email, make_unsubscribe_url
 
 logging.basicConfig(
     level=logging.INFO,
@@ -148,43 +148,63 @@ def _send_with_retry(to: str, subject: str, html: str, retries: int = MAX_RETRIE
     return False
 
 
-async def main(dry_run: bool = False, user_limit: int | None = None) -> None:
+async def main(
+    dry_run: bool = False,
+    user_limit: int | None = None,
+    test_email: str | None = None,
+) -> None:
     today_str = date.today().strftime("%Y年%m月%d日")
     engine = create_async_engine(DATABASE_URL, echo=False)
 
     async with AsyncSession(engine) as session:
         signals = await fetch_today_signals(session, limit=50)
         accuracy_info = await fetch_accuracy(session)
-        subscribers = await get_alert_subscribers(session)
+        if test_email:
+            # テスト送信: 指定アドレスに1通だけ送る
+            result = await session.execute(
+                select(User).where(User.email == test_email)
+            )
+            user_obj = result.scalar_one_or_none()
+            subscribers = [user_obj] if user_obj else []
+            if not user_obj:
+                logger.warning(f"テスト対象ユーザーが見つかりません: {test_email}")
+        else:
+            subscribers = await get_alert_subscribers(session)
 
     await engine.dispose()
 
     up_accuracy = accuracy_info.get("UP", {}).get("accuracy_pct")
 
     if not signals:
-        logger.info(f"配信できるシグナルがありません。終了します。")
+        logger.info("配信できるシグナルがありません。終了します。")
         return
 
     signal_date_str = signals[0].get("pred_date", today_str)
     subject = f"📈 {signal_date_str}のAIシグナル — UP候補 {len(signals)}銘柄"
+    if test_email:
+        subject = f"[テスト] {subject}"
 
     targets = subscribers[:user_limit] if user_limit else subscribers
     logger.info(
         f"シグナル {len(signals)} 件 / 配信対象 {len(targets)} 名"
         f"{' [DRY RUN]' if dry_run else ''}"
+        f"{' [TEST]' if test_email else ''}"
     )
 
     sent = failed = skipped = 0
     for user in targets:
+        unsub_url = make_unsubscribe_url(user.id, user.email, SITE_URL)
         html = render_daily_signal_email(
             date=signal_date_str,
             signals=signals,
             accuracy_pct=up_accuracy,
             site_url=SITE_URL,
+            unsubscribe_url=unsub_url,
         )
 
         if dry_run:
             logger.info(f"  [DRY RUN] → {user.email}")
+            logger.info(f"    unsubscribe_url: {unsub_url}")
             skipped += 1
             continue
 
@@ -213,6 +233,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="日次シグナルメール配信")
     parser.add_argument("--dry-run", action="store_true", help="送信せずログのみ出力")
     parser.add_argument("--limit", type=int, default=None, help="送信ユーザー上限数")
+    parser.add_argument(
+        "--test-email", metavar="EMAIL", default=None,
+        help="指定アドレスに1通だけテスト送信（Proフラグ不要）"
+    )
     args = parser.parse_args()
 
-    asyncio.run(main(dry_run=args.dry_run, user_limit=args.limit))
+    asyncio.run(main(dry_run=args.dry_run, user_limit=args.limit, test_email=args.test_email))
