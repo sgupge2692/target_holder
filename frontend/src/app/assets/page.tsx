@@ -5,8 +5,106 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet,
   Home, Car, PiggyBank, Landmark, Package, AlertCircle, RefreshCw,
-  ChevronDown, ChevronUp, Info
+  ChevronDown, ChevronUp, Info, Zap, ArrowRight
 } from "lucide-react";
+
+// ─── シグナル型 ───────────────────────────────────────────────
+interface WatchlistItem {
+  code: string;
+  company_name: string | null;
+  signal: "buy" | "sell" | "hold" | null;
+  up_probability: number | null;
+  latest_price: number | null;
+}
+
+// ─── シミュレーションカード ───────────────────────────────────
+function SignalSimulator({
+  watchlist,
+  netWorth,
+}: {
+  watchlist: WatchlistItem[];
+  netWorth: number;
+}) {
+  const [investAmount, setInvestAmount] = useState(1000000); // デフォルト100万円
+  const buySignals = watchlist.filter(
+    w => w.signal === "buy" && w.up_probability !== null && w.up_probability > 0.55
+  );
+
+  if (buySignals.length === 0) {
+    return (
+      <div className="text-center py-6 text-sm text-surface-400">
+        現在ウォッチリストに「買い」シグナルの銘柄がありません
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 投資額スライダー */}
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-surface-500 shrink-0">投資額</span>
+        <input
+          type="range"
+          min={100000}
+          max={10000000}
+          step={100000}
+          value={investAmount}
+          onChange={e => setInvestAmount(Number(e.target.value))}
+          className="flex-1 accent-brand-500"
+        />
+        <span className="text-sm font-bold text-surface-800 dark:text-surface-200 w-20 text-right">
+          {(investAmount / 10000).toFixed(0)}万円
+        </span>
+      </div>
+
+      {/* 銘柄別シミュレーション */}
+      <div className="space-y-2">
+        {buySignals.slice(0, 5).map(item => {
+          const prob = item.up_probability!;
+          // 期待リターン: 上昇確率 × 平均上昇率(+3%) - 下降確率 × 平均下落率(-2%)
+          const expectedReturn = prob * 0.03 - (1 - prob) * 0.02;
+          const expectedGain = investAmount * expectedReturn;
+          const newNetWorth = netWorth + expectedGain;
+          const changeRate = netWorth > 0 ? (expectedGain / netWorth) * 100 : 0;
+          const isPositive = expectedGain >= 0;
+
+          return (
+            <div key={item.code} className="flex items-center gap-3 p-3 bg-surface-50 dark:bg-surface-800 rounded-xl">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-brand-600 dark:text-brand-400">{item.code}</span>
+                  <span className="text-xs text-surface-600 dark:text-surface-400 truncate">{item.company_name}</span>
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="h-1.5 rounded-full bg-surface-200 dark:bg-surface-700 flex-1 overflow-hidden">
+                    <div
+                      className="h-full bg-brand-500 rounded-full"
+                      style={{ width: `${prob * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-surface-500">{(prob * 100).toFixed(0)}%</span>
+                </div>
+              </div>
+              <ArrowRight size={12} className="text-surface-300 shrink-0" />
+              <div className="text-right shrink-0">
+                <div className={`text-sm font-bold ${isPositive ? "text-brand-600 dark:text-brand-400" : "text-red-500"}`}>
+                  {isPositive ? "+" : ""}{(expectedGain / 10000).toFixed(1)}万円
+                </div>
+                <div className="text-xs text-surface-400">
+                  純資産 {isPositive ? "+" : ""}{changeRate.toFixed(2)}%
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-xs text-surface-400 text-center">
+        ※ 期待値計算（上昇確率×+3% − 下降確率×2%）。投資判断の参考に限ります。
+      </p>
+    </div>
+  );
+}
 
 // ─── 型定義 ───────────────────────────────────────────────────
 type Category = "cash" | "stock" | "realestate" | "vehicle" | "other" | "liability";
@@ -100,6 +198,7 @@ export default function AssetsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // フォーム状態
@@ -133,14 +232,16 @@ export default function AssetsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [acctRes, sumRes, histRes] = await Promise.all([
+      const [acctRes, sumRes, histRes, wlRes] = await Promise.all([
         apiFetch("/api/assets/accounts"),
         apiFetch("/api/assets/summary"),
         apiFetch("/api/assets/history?months=12"),
+        apiFetch("/api/watchlist").catch(() => ({ watchlist: [] })),
       ]);
       setAccounts(acctRes.accounts);
       setSummary(sumRes);
       setHistory(histRes.history);
+      setWatchlist(wlRes.watchlist ?? []);
     } catch {}
     setLoading(false);
   }, [apiFetch]);
@@ -315,18 +416,19 @@ export default function AssetsPage() {
         )}
       </div>
 
-      {/* ─── 株式シグナル連動バナー（唯一無二機能）─── */}
-      <div className="border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/20 rounded-2xl p-4 flex items-start gap-3">
-        <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center shrink-0 mt-0.5">
-          <TrendingUp size={16} className="text-white" />
+      {/* ─── 株式シグナル × 資産インパクトシミュレーター ─── */}
+      <div className="border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/20 rounded-2xl overflow-hidden">
+        <div className="px-4 pt-4 pb-3 flex items-center gap-2 border-b border-brand-100 dark:border-brand-900">
+          <div className="w-7 h-7 rounded-lg bg-brand-500 flex items-center justify-center shrink-0">
+            <Zap size={14} className="text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-brand-700 dark:text-brand-300">AIシグナル × 純資産シミュレーター</p>
+            <p className="text-xs text-brand-500 dark:text-brand-400">ウォッチリストの買いシグナル銘柄に投資したら純資産はどう変わる？</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-bold text-brand-700 dark:text-brand-300">株式シグナル × 資産インパクト</p>
-          <p className="text-xs text-brand-600 dark:text-brand-400 mt-0.5">
-            ウォッチリストのAIシグナルが「買い」を示した銘柄を株式資産に登録すると、
-            予測が当たった場合の純資産変化をシミュレーションできます。
-            現金・不動産・車・ローンまで含めた「総合的な財務健全度」を一目で確認できるのは、このアプリだけです。
-          </p>
+        <div className="p-4">
+          <SignalSimulator watchlist={watchlist} netWorth={netWorth} />
         </div>
       </div>
 
