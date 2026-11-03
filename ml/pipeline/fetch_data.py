@@ -3,9 +3,9 @@ J-Quants APIから日足データを取得してDBに保存するスクリプト
 毎日15:35にCI/CDから実行される
 
 使い方:
-  python pipeline/fetch_data.py              # 全銘柄（直近7日）
+  python pipeline/fetch_data.py              # 全銘柄（直近2年）
   python pipeline/fetch_data.py --test       # 主要30銘柄のみ（動作確認用）
-  python pipeline/fetch_data.py --days 90    # 直近90日
+  python pipeline/fetch_data.py --days 90    # 直近90日のみ
 """
 import os
 import sys
@@ -113,7 +113,7 @@ def save_to_db(df: pd.DataFrame, table_name: str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--test", action="store_true", help="主要20銘柄のみ取得（動作確認用）")
-    parser.add_argument("--days", type=int, default=7, help="直近何日分取得するか（デフォルト: 7）")
+    parser.add_argument("--days", type=int, default=730, help="直近何日分取得するか（デフォルト: 730＝2年）")
     args = parser.parse_args()
 
     today = datetime.today()
