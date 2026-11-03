@@ -177,7 +177,7 @@ def build_prompt(code: str, signal: str, up_prob: float, top_features: list[dict
 def generate_explanation(code: str, signal: str, up_prob: float, top_features: list[dict]) -> dict:
     """gpt-4o-mini でシグナル説明を生成する"""
     if not OPENAI_API_KEY:
-        return {"reason": "説明生成にはOPENAI_API_KEYが必要です", "key_indicators": []}
+        return {"reason": None, "key_indicators": []}
 
     try:
         from openai import OpenAI
