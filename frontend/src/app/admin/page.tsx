@@ -245,7 +245,7 @@ export default function AdminPage() {
   const { data: featData                              } = useSWR(tab === "model"   ? ["admin:features", featureN]  : null, () => getAdminFeatures(featureN));
 
   if (loading) return <div className="flex items-center justify-center h-48 text-surface-400 text-sm">読み込み中...</div>;
-  if (!user || user.plan !== "pro") {
+  if (!user || !user.is_admin) {
     return (
       <div className="text-center py-20 space-y-3">
         <p className="text-surface-400">管理者のみアクセス可能です</p>
