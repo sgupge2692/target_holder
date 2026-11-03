@@ -122,8 +122,11 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
   // チャート生成
   const buildChart = useCallback(() => {
     if (!containerRef.current) return;
-    chartRef.current?.remove();
-    chartRef.current = null;
+    // StrictMode の二重実行で dispose 済みオブジェクトにアクセスしないよう try/catch
+    if (chartRef.current) {
+      try { chartRef.current.remove(); } catch {}
+      chartRef.current = null;
+    }
 
     const bg    = isDark ? "#0f1a2e" : "#ffffff";
     const text  = isDark ? "#94a3b8" : "#64748b";
@@ -227,55 +230,69 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
       createSeriesMarkers(candle, markers);
     }
 
+    // dispose 済みアクセス防止フラグ
+    let disposed = false;
+
     // カスタムツールチップ
     chart.subscribeCrosshairMove(param => {
+      if (disposed) return;
       const tooltip = tooltipRef.current;
       if (!tooltip) return;
       if (!param.time || !param.point) {
         tooltip.style.display = "none";
         return;
       }
-      const cd = param.seriesData.get(candle);
-      if (!cd || !("open" in cd)) {
-        tooltip.style.display = "none";
-        return;
-      }
-      const { open, high, low, close } = cd as CandlestickData;
-      const isGreen = close >= open;
-      tooltip.innerHTML = `
-        <div class="text-xs font-mono leading-relaxed">
-          <div class="font-bold mb-1 ${isGreen ? "text-brand-500 dark:text-brand-400" : "text-danger-500 dark:text-danger-400"}">
-            ${String(param.time)}
+      try {
+        const cd = param.seriesData.get(candle);
+        if (!cd || !("open" in cd)) {
+          tooltip.style.display = "none";
+          return;
+        }
+        const { open, high, low, close } = cd as CandlestickData;
+        const isGreen = close >= open;
+        tooltip.innerHTML = `
+          <div class="text-xs font-mono leading-relaxed">
+            <div class="font-bold mb-1 ${isGreen ? "text-brand-500 dark:text-brand-400" : "text-danger-500 dark:text-danger-400"}">
+              ${String(param.time)}
+            </div>
+            <div class="grid grid-cols-2 gap-x-3 text-surface-700 dark:text-surface-300">
+              <span class="text-surface-400 dark:text-surface-500">始値</span><span>¥${open.toLocaleString()}</span>
+              <span class="text-surface-400 dark:text-surface-500">高値</span><span class="${isGreen ? "text-brand-600 dark:text-brand-400" : ""}">¥${high.toLocaleString()}</span>
+              <span class="text-surface-400 dark:text-surface-500">安値</span><span class="${!isGreen ? "text-danger-500 dark:text-danger-400" : ""}">¥${low.toLocaleString()}</span>
+              <span class="text-surface-400 dark:text-surface-500">終値</span><span class="font-bold">¥${close.toLocaleString()}</span>
+            </div>
           </div>
-          <div class="grid grid-cols-2 gap-x-3 text-surface-700 dark:text-surface-300">
-            <span class="text-surface-400 dark:text-surface-500">始値</span><span>¥${open.toLocaleString()}</span>
-            <span class="text-surface-400 dark:text-surface-500">高値</span><span class="${isGreen ? "text-brand-600 dark:text-brand-400" : ""}">¥${high.toLocaleString()}</span>
-            <span class="text-surface-400 dark:text-surface-500">安値</span><span class="${!isGreen ? "text-danger-500 dark:text-danger-400" : ""}">¥${low.toLocaleString()}</span>
-            <span class="text-surface-400 dark:text-surface-500">終値</span><span class="font-bold">¥${close.toLocaleString()}</span>
-          </div>
-        </div>
-      `;
-      const rect   = containerRef.current!.getBoundingClientRect();
-      const tipW   = tooltip.offsetWidth;
-      const tipH   = tooltip.offsetHeight;
-      let left     = param.point.x + 12;
-      if (left + tipW > rect.width) left = param.point.x - tipW - 12;
-      let top      = param.point.y - tipH / 2;
-      if (top < 0) top = 4;
-      tooltip.style.left    = `${left}px`;
-      tooltip.style.top     = `${top}px`;
-      tooltip.style.display = "block";
+        `;
+        const rect   = containerRef.current!.getBoundingClientRect();
+        const tipW   = tooltip.offsetWidth;
+        const tipH   = tooltip.offsetHeight;
+        let left     = param.point.x + 12;
+        if (left + tipW > rect.width) left = param.point.x - tipW - 12;
+        let top      = param.point.y - tipH / 2;
+        if (top < 0) top = 4;
+        tooltip.style.left    = `${left}px`;
+        tooltip.style.top     = `${top}px`;
+        tooltip.style.display = "block";
+      } catch {}
     });
 
     // レスポンシブ
     const ro = new ResizeObserver(() => {
-      chart.applyOptions({ width: containerRef.current?.clientWidth ?? 600 });
+      if (disposed) return;
+      try {
+        chart.applyOptions({ width: containerRef.current?.clientWidth ?? 600 });
+      } catch {}
     });
     ro.observe(containerRef.current);
 
     chart.timeScale().fitContent();
 
-    return () => { ro.disconnect(); chart.remove(); };
+    return () => {
+      disposed = true;
+      ro.disconnect();
+      try { chart.remove(); } catch {}
+      chartRef.current = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDark, period, showVolume, showEma25, showEma75, showSignal,
       candleData.length, volumeData.length]);
