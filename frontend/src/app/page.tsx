@@ -13,6 +13,7 @@ import {
   ChevronDown, ChevronRight, Download, Lightbulb,
   SlidersHorizontal, TrendingUp, TrendingDown,
   Zap, RefreshCw, BarChart3, TrendingDown as ShortIcon, Lock,
+  Activity,
 } from "lucide-react";
 
 // ── タブ定義 ─────────────────────────────────────────────────────────────────
@@ -39,7 +40,7 @@ const STYLE_TABS: StyleConfig[] = [
     proOnly: false,
     defaultMinProb: 65,
     signalFilter: "ALL",
-    hint: "AIが翌営業日に上昇 / 下落する可能性の高い銘柄を配信",
+    hint: "翌営業日に上昇 / 下落する可能性の高い銘柄をLGBM×XGBoostアンサンブルで配信",
   },
   {
     id: "swing",
@@ -73,26 +74,22 @@ const STYLE_TABS: StyleConfig[] = [
   },
 ];
 
-/** シグナルの「確度」= UP なら up_probability、DOWN なら 1 - up_probability */
 function signalProb(signal: string, upProb: number): number {
   return signal === "DOWN" ? 1 - upProb : upProb;
 }
 
-/** 確率を色クラスに変換（UP:緑系 / DOWN:赤系） */
 function probColor(prob: number, signal: string): string {
   if (signal === "DOWN") {
-    if (prob >= 0.8) return "bg-red-500";
-    if (prob >= 0.7) return "bg-red-400";
-    if (prob >= 0.6) return "bg-orange-400";
-    return "bg-gray-400";
+    if (prob >= 0.8) return "bg-red-500 dark:bg-red-500";
+    if (prob >= 0.7) return "bg-red-400 dark:bg-red-400";
+    return "bg-orange-400";
   }
-  if (prob >= 0.8)  return "bg-brand-500";
-  if (prob >= 0.7)  return "bg-emerald-400";
+  if (prob >= 0.8)  return "bg-teal-500 dark:bg-teal-400";
+  if (prob >= 0.7)  return "bg-teal-400 dark:bg-teal-500";
   if (prob >= 0.6)  return "bg-amber-400";
-  return "bg-gray-400";
+  return "bg-slate-300 dark:bg-slate-600";
 }
 
-/** 確率バー（テーブル行 / カード共用）*/
 function ProbBar({ upProb, signal }: { upProb: number; signal: string }) {
   const prob = signalProb(signal, upProb);
   const pct = Math.round(prob * 100);
@@ -105,12 +102,12 @@ function ProbBar({ upProb, signal }: { upProb: number; signal: string }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className={`font-mono font-semibold text-xs w-[3.4rem] text-right ${
+      <span className={`font-mono font-black text-xs w-[3.2rem] text-right tabular-nums ${
         prob >= 0.75
-          ? isDown ? "text-red-500 dark:text-red-400" : "text-brand-600 dark:text-brand-400"
-          : "text-gray-600 dark:text-slate-300"
+          ? isDown ? "text-red-500 dark:text-red-400" : "text-teal-600 dark:text-teal-300"
+          : "text-slate-500 dark:text-slate-400"
       }`}>
-        {pct.toFixed(1)}%
+        {pct}%
       </span>
     </div>
   );
@@ -119,19 +116,18 @@ function ProbBar({ upProb, signal }: { upProb: number; signal: string }) {
 function ProbabilityFilter({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <div className="flex items-center gap-2.5">
-      <SlidersHorizontal size={14} className="text-gray-400 shrink-0" />
-      <span className="text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap">確度 ≥</span>
+      <SlidersHorizontal size={13} className="text-slate-400 shrink-0" />
+      <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-semibold">確度 ≥</span>
       <input
         type="range" min={50} max={95} step={5} value={value}
         onChange={e => onChange(Number(e.target.value))}
-        className="w-24 accent-brand-600"
+        className="w-24 accent-teal-600"
       />
-      <span className="text-xs font-mono font-bold w-10 text-brand-600 dark:text-brand-400">{value}%</span>
+      <span className="text-xs font-mono font-black w-10 text-teal-600 dark:text-teal-400">{value}%</span>
     </div>
   );
 }
 
-// ── 投資スタイルタブ ──────────────────────────────────────────────────────────
 function StyleTabBar({
   current, onChange, isPro,
 }: {
@@ -151,23 +147,22 @@ function StyleTabBar({
             onClick={() => !locked && onChange(tab.id)}
             title={locked ? "Proプラン限定" : tab.description}
             className={`
-              flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold
+              flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-black
               whitespace-nowrap transition-all duration-150 shrink-0 relative
+              tracking-wide uppercase
               ${active
                 ? tab.id === "short"
-                  ? "bg-red-500 text-white shadow-sm"
-                  : "bg-brand-600 text-white shadow-sm"
+                  ? "bg-red-500 text-white"
+                  : "bg-teal-600 dark:bg-teal-500 text-white"
                 : locked
-                  ? "bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500 cursor-not-allowed"
-                  : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700"
+                  ? "bg-slate-100 dark:bg-slate-800/60 text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                  : "bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/60"
               }
             `}
           >
-            <Icon size={14} strokeWidth={2.2} />
+            <Icon size={12} strokeWidth={2.5} />
             <span>{tab.label}</span>
-            {locked && (
-              <Lock size={11} className="ml-0.5 opacity-60" />
-            )}
+            {locked && <Lock size={10} className="ml-0.5 opacity-50" />}
           </button>
         );
       })}
@@ -175,20 +170,19 @@ function StyleTabBar({
   );
 }
 
-// ── Proロックオーバーレイ ────────────────────────────────────────────────────
 function ProLockedOverlay({ label }: { label: string }) {
   return (
-    <div className="rounded-2xl border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/10 p-10 text-center">
-      <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-800/40 mb-3">
-        <Lock size={22} className="text-amber-500" />
+    <div className="rounded border border-dashed border-amber-300 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-900/5 p-10 text-center">
+      <div className="inline-flex items-center justify-center w-10 h-10 rounded bg-amber-100 dark:bg-amber-900/30 mb-3">
+        <Lock size={18} className="text-amber-500 dark:text-amber-400" />
       </div>
-      <p className="font-bold text-gray-800 dark:text-white mb-1">「{label}」はPro限定</p>
-      <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
+      <p className="font-black text-slate-800 dark:text-white mb-1 tracking-tight">「{label}」はPro限定</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
         Proプランにアップグレードするとすべてのスタイルが利用可能になります
       </p>
       <Link
         href="/billing"
-        className="inline-block bg-amber-500 hover:bg-amber-600 text-white px-6 py-2 rounded-xl font-bold text-sm transition-colors"
+        className="inline-block bg-amber-500 hover:bg-amber-600 text-white px-5 py-2 rounded text-xs font-black transition-colors tracking-wider uppercase"
       >
         Proにアップグレード →
       </Link>
@@ -200,94 +194,103 @@ function ProLockedOverlay({ label }: { label: string }) {
 function AccuracyCard({ row }: { row: AccuracyRow }) {
   const isUp = row.signal === "UP";
   return (
-    <div className={`relative overflow-hidden rounded-2xl border p-5 ${
+    <div className={`relative overflow-hidden rounded border p-4 ${
       isUp
-        ? "border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-slate-800"
-        : "border-red-200 dark:border-red-800 bg-gradient-to-br from-red-50 to-white dark:from-red-950/40 dark:to-slate-800"
+        ? "border-teal-200 dark:border-teal-900/60 bg-gradient-to-br from-teal-50 to-white dark:from-teal-950/20 dark:to-[#0c1424]"
+        : "border-red-200 dark:border-red-900/50 bg-gradient-to-br from-red-50 to-white dark:from-red-950/20 dark:to-[#0c1424]"
     }`}>
-      <div className={`absolute -right-4 -top-4 w-20 h-20 rounded-full opacity-10 ${isUp ? "bg-emerald-400" : "bg-red-400"}`} />
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-1.5 mb-2">
-            {isUp
-              ? <TrendingUp size={15} className="text-emerald-500" />
-              : <TrendingDown size={15} className="text-red-400" />
-            }
-            <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
-              {isUp ? "上昇" : "下落"}予測
-            </span>
-          </div>
-          <p className={`text-4xl font-black tabular-nums ${isUp ? "text-emerald-600" : "text-red-500"}`}>
-            {row.accuracy_pct}%
-          </p>
-          <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">的中率 (n={row.total})</p>
-        </div>
-        <div className="text-right">
-          <p className={`text-sm font-bold ${(row.avg_return_pct ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-            {(row.avg_return_pct ?? 0) >= 0 ? "+" : ""}{row.avg_return_pct}%
-          </p>
-          <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">平均リターン</p>
-        </div>
+      {/* 右上の装飾 */}
+      <div className={`absolute right-3 top-3 opacity-10 ${isUp ? "text-teal-500" : "text-red-500"}`}>
+        {isUp ? <TrendingUp size={40} /> : <TrendingDown size={40} />}
+      </div>
+
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className={`text-[10px] font-black tracking-[0.14em] uppercase ${isUp ? "text-teal-600 dark:text-teal-400" : "text-red-500 dark:text-red-400"}`}>
+          {isUp ? "▲ UP" : "▼ DOWN"}
+        </span>
+      </div>
+      <p className={`text-3xl font-black tabular-nums leading-none ${isUp ? "text-teal-600 dark:text-teal-300" : "text-red-500 dark:text-red-400"}`}>
+        {row.accuracy_pct}%
+      </p>
+      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-semibold">的中率 / n={row.total}</p>
+      <div className="mt-2 pt-2 border-t border-slate-100 dark:border-[#1a2740] flex items-center justify-between">
+        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">平均リターン</span>
+        <span className={`font-mono font-black text-sm ${(row.avg_return_pct ?? 0) >= 0 ? "text-teal-600 dark:text-teal-300" : "text-red-500 dark:text-red-400"}`}>
+          {(row.avg_return_pct ?? 0) >= 0 ? "+" : ""}{row.avg_return_pct}%
+        </span>
       </div>
     </div>
   );
 }
 
 // ── シグナル行（デスクトップ テーブル用）────────────────────────────────────
-function SignalRow({ s, activeFilter }: { s: Signal; activeFilter: SignalFilter }) {
+function SignalRow({ s }: { s: Signal }) {
   const [open, setOpen] = useState(false);
   const keyFactors: string[] = (() => {
     try { return s.key_factors ? JSON.parse(s.key_factors) : []; } catch { return []; }
   })();
 
+  const isDown = s.signal === "DOWN";
+
   return (
     <>
-      <tr className="group hover:bg-brand-50/40 dark:hover:bg-brand-900/10 transition-colors">
-        <td className="px-4 py-3.5">
-          <Link href={`/stocks/${s.Code}`} className="font-semibold hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
-            {s.company_name ?? s.Code}
+      <tr className={`group transition-colors hover:bg-slate-50 dark:hover:bg-[#0d1a2f] ${
+        isDown ? "border-l-2 border-l-red-400 dark:border-l-red-500" : "border-l-2 border-l-teal-500 dark:border-l-teal-400"
+      }`}>
+        <td className="px-4 py-3">
+          <Link href={`/stocks/${s.Code}`} className="group/link">
+            <p className="font-bold text-sm text-slate-900 dark:text-white group-hover/link:text-teal-600 dark:group-hover/link:text-teal-300 transition-colors">
+              {s.company_name ?? s.Code}
+            </p>
+            <p className="ticker mt-0.5">{s.Code}</p>
           </Link>
-          <div className="text-xs text-gray-400 mt-0.5">{s.Code}</div>
         </td>
-        <td className="px-4 py-3.5 text-sm text-gray-500 dark:text-slate-400">{s.Date}</td>
-        <td className="px-4 py-3.5 text-center"><SignalBadge signal={s.signal} /></td>
-        <td className="px-4 py-3.5 w-40">
+        <td className="px-4 py-3">
+          <span className="font-mono text-xs text-slate-400 dark:text-slate-500">{s.Date}</span>
+        </td>
+        <td className="px-4 py-3 text-center"><SignalBadge signal={s.signal} /></td>
+        <td className="px-4 py-3 w-40">
           <ProbBar upProb={s.up_probability} signal={s.signal} />
         </td>
-        <td className="px-4 py-3.5 text-right font-mono text-sm">
+        <td className="px-4 py-3 text-right font-mono text-sm">
           {s.actual_return != null
-            ? <span className={s.actual_return >= 0 ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
+            ? <span className={`font-black ${s.actual_return >= 0 ? "text-teal-600 dark:text-teal-300" : "text-red-500 dark:text-red-400"}`}>
                 {s.actual_return >= 0 ? "+" : ""}{(s.actual_return * 100).toFixed(2)}%
               </span>
-            : <span className="text-gray-300 dark:text-slate-600">—</span>
+            : <span className="text-slate-200 dark:text-slate-700">—</span>
           }
         </td>
-        <td className="px-4 py-3.5 text-center text-base">
-          {s.is_correct == null ? <span className="text-gray-300 dark:text-slate-600 text-sm">—</span> : s.is_correct ? "✅" : "❌"}
+        <td className="px-4 py-3 text-center text-sm">
+          {s.is_correct == null
+            ? <span className="text-slate-200 dark:text-slate-700 text-xs">—</span>
+            : s.is_correct
+              ? <span className="text-teal-500 font-black text-xs">✓</span>
+              : <span className="text-red-400 font-black text-xs">✗</span>
+          }
         </td>
-        <td className="px-4 py-3.5 text-center">
+        <td className="px-4 py-3 text-center">
           {s.explanation && (
             <button
               onClick={() => setOpen(v => !v)}
-              className="inline-flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline font-medium"
+              className="inline-flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400 hover:underline font-black tracking-wider uppercase"
             >
-              {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              AI
+              {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+              解説
             </button>
           )}
         </td>
       </tr>
       {open && s.explanation && (
-        <tr className="bg-brand-50/60 dark:bg-brand-900/20 border-l-2 border-brand-400">
-          <td colSpan={7} className="px-6 py-3">
-            <div className="flex items-start gap-2.5 text-sm">
-              <Lightbulb size={15} className="mt-0.5 shrink-0 text-brand-500" />
+        <tr className="bg-teal-50/60 dark:bg-teal-900/10">
+          <td colSpan={7} className="px-5 py-3">
+            <div className="flex items-start gap-2.5 text-xs">
+              <Lightbulb size={13} className="mt-0.5 shrink-0 text-teal-500" />
               <div>
-                <p className="text-brand-900 dark:text-brand-200 font-medium leading-relaxed">{s.explanation}</p>
+                <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{s.explanation}</p>
                 {keyFactors.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {keyFactors.map((f, i) => (
-                      <span key={i} className="px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-800 text-xs text-brand-700 dark:text-brand-300">
+                      <span key={i} className="px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-semibold">
                         {f}
                       </span>
                     ))}
@@ -302,7 +305,7 @@ function SignalRow({ s, activeFilter }: { s: Signal; activeFilter: SignalFilter 
   );
 }
 
-// ── シグナルカード（モバイルファースト）──────────────────────────────────────
+// ── シグナルカード（モバイル）──────────────────────────────────────────────
 function SignalCard({ s }: { s: Signal }) {
   const [open, setOpen] = useState(false);
   const keyFactors: string[] = (() => {
@@ -312,30 +315,34 @@ function SignalCard({ s }: { s: Signal }) {
   const conf = Math.round(signalProb(s.signal, s.up_probability) * 100);
 
   return (
-    <div className="signal-card-v2">
-      <Link href={`/stocks/${s.Code}`} className="block p-4 active:bg-gray-50 dark:active:bg-slate-700/50 transition-colors">
-        {/* 上段: 銘柄名 + シグナルバッジ */}
+    <div className={`signal-card-v2 ${isDown ? "down" : "up"}`}>
+      <Link href={`/stocks/${s.Code}`} className="block p-4 transition-colors active:bg-slate-50 dark:active:bg-slate-800/30">
+        {/* 上段: 銘柄名 + シグナル */}
         <div className="flex items-start justify-between mb-3">
           <div className="min-w-0 pr-3">
-            <p className="font-bold text-base text-gray-900 dark:text-white leading-tight truncate">
+            <p className="font-black text-sm text-slate-900 dark:text-white leading-tight truncate tracking-tight">
               {s.company_name ?? s.Code}
             </p>
-            <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{s.Code} · {s.Date}</p>
+            <p className="ticker mt-0.5">{s.Code} · {s.Date}</p>
           </div>
           <SignalBadge signal={s.signal} />
         </div>
 
-        {/* 確率バー + 数値 */}
-        <div className="mb-3">
-          <div className="flex items-center justify-between text-xs text-gray-400 dark:text-slate-500 mb-1.5">
-            <span>{isDown ? "下落確率" : "上昇確率"}</span>
-            <span className={`font-mono font-black text-base ${isDown ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+        {/* 確率バー */}
+        <div className="mb-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-black tracking-[0.1em] uppercase text-slate-400 dark:text-slate-500">
+              {isDown ? "下落確率" : "上昇確率"}
+            </span>
+            <span className={`font-mono font-black text-lg leading-none ${
+              isDown ? "text-red-500 dark:text-red-400" : "text-teal-600 dark:text-teal-300"
+            }`}>
               {conf}%
             </span>
           </div>
-          <div className="prob-bar-track h-2">
+          <div className="prob-bar-track h-[3px]">
             <div
-              className={`prob-bar-fill h-2 ${isDown ? "bg-red-500" : conf >= 80 ? "bg-emerald-500" : conf >= 70 ? "bg-emerald-400" : "bg-amber-400"}`}
+              className={`prob-bar-fill h-[3px] ${isDown ? "bg-red-500" : conf >= 80 ? "bg-teal-500" : conf >= 70 ? "bg-teal-400" : "bg-amber-400"}`}
               style={{ width: `${conf}%` }}
             />
           </div>
@@ -343,14 +350,16 @@ function SignalCard({ s }: { s: Signal }) {
 
         {/* 実績リターン */}
         {s.actual_return != null && (
-          <div className="flex items-center justify-between pt-2.5 border-t border-gray-100 dark:border-slate-700/60">
-            <span className="text-xs text-gray-400 dark:text-slate-500">実績リターン</span>
+          <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-[#1a2740]">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">実績</span>
             <div className="flex items-center gap-1.5">
-              <span className={`font-mono font-bold text-sm ${s.actual_return >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+              <span className={`font-mono font-black text-sm ${s.actual_return >= 0 ? "text-teal-600 dark:text-teal-300" : "text-red-500 dark:text-red-400"}`}>
                 {s.actual_return >= 0 ? "+" : ""}{(s.actual_return * 100).toFixed(2)}%
               </span>
               {s.is_correct != null && (
-                <span className="text-sm">{s.is_correct ? "✅" : "❌"}</span>
+                <span className={`text-xs font-black ${s.is_correct ? "text-teal-500" : "text-red-400"}`}>
+                  {s.is_correct ? "✓" : "✗"}
+                </span>
               )}
             </div>
           </div>
@@ -361,29 +370,29 @@ function SignalCard({ s }: { s: Signal }) {
         <>
           <button
             onClick={() => setOpen(v => !v)}
-            className={`w-full flex items-center justify-center gap-1.5 text-xs py-2.5 border-t font-semibold transition-colors ${
+            className={`w-full flex items-center justify-center gap-1.5 text-[10px] py-2 border-t font-black tracking-widest uppercase transition-colors ${
               isDown
                 ? "border-red-100 dark:border-red-900/30 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10"
-                : "border-emerald-100 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/10"
+                : "border-teal-100 dark:border-teal-900/30 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/10"
             }`}
           >
-            <Lightbulb size={13} />
-            {open ? "閉じる" : "AI説明を見る"}
+            <Lightbulb size={11} />
+            {open ? "閉じる" : "解説を見る"}
           </button>
           {open && (
             <div className={`px-4 py-3 text-xs leading-relaxed ${
               isDown
                 ? "bg-red-50 dark:bg-red-900/10 text-red-900 dark:text-red-200"
-                : "bg-emerald-50 dark:bg-emerald-900/10 text-emerald-900 dark:text-emerald-200"
+                : "bg-teal-50 dark:bg-teal-900/10 text-teal-900 dark:text-teal-200"
             }`}>
               <p>{s.explanation}</p>
               {keyFactors.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {keyFactors.map((f, i) => (
-                    <span key={i} className={`px-1.5 py-0.5 rounded-full text-xs ${
+                    <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                       isDown
                         ? "bg-red-100 dark:bg-red-800/40 text-red-700 dark:text-red-300"
-                        : "bg-emerald-100 dark:bg-emerald-800/40 text-emerald-700 dark:text-emerald-300"
+                        : "bg-teal-100 dark:bg-teal-800/40 text-teal-700 dark:text-teal-300"
                     }`}>
                       {f}
                     </span>
@@ -410,7 +419,6 @@ export default function HomePage() {
   const signalFilter = styleConfig.signalFilter;
   const isPro = user?.plan === "pro";
 
-  // hooks は早期 return より前に置く（React の rules of hooks）
   const { data: signalData, isLoading: sigLoading } = useSWR(
     user ? ["signals", signalFilter] : null,
     () => getLatestSignals(signalFilter === "ALL" ? undefined : signalFilter),
@@ -433,7 +441,6 @@ export default function HomePage() {
     }
   };
 
-  // スタイルタブ変更時に確度フィルターをリセット
   const handleStyleChange = (next: StyleTab) => {
     const cfg = STYLE_TABS.find(t => t.id === next)!;
     setStyleTab(next);
@@ -456,26 +463,26 @@ export default function HomePage() {
   return (
     <div className="space-y-5">
       {/* ── ヘッダー ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2.5 mb-0.5">
-            <h1 className="text-2xl font-bold tracking-tight">AIシグナル</h1>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-white uppercase">
+              Signal Feed
+            </h1>
             {!sigLoading && filtered.length > 0 && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <span className="live-dot" />
                 {latestDate && (
-                  <span className="text-xs text-gray-400 dark:text-slate-500 font-mono">{latestDate}</span>
+                  <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500 tracking-wider">{latestDate}</span>
                 )}
+                <span className="px-1.5 py-0.5 rounded bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 text-[10px] font-black tracking-wider">
+                  {filtered.length}件
+                </span>
               </div>
             )}
-            {!sigLoading && filtered.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 text-xs font-bold">
-                {filtered.length}件
-              </span>
-            )}
           </div>
-          <p className="text-sm text-gray-500 dark:text-slate-400">
-            LightGBM × XGBoostによる翌日騰落予測
+          <p className="text-xs text-slate-400 dark:text-slate-500 font-semibold tracking-wide">
+            LightGBM × XGBoost ensemble · 翌日騰落予測
           </p>
         </div>
         <StockSearch />
@@ -494,31 +501,29 @@ export default function HomePage() {
 
       {/* ── Proアップグレードバナー ── */}
       {user?.plan === "free" && (
-        <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3 text-sm">
+        <div className="flex items-center justify-between rounded border border-amber-200 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-900/8 px-4 py-2.5 text-sm">
           <div>
-            <p className="font-semibold text-amber-800 dark:text-amber-300">無料プランは上位 10 件まで</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Pro プランで全件表示・CSV・スイング/長期/信用売りモード</p>
+            <p className="font-black text-amber-800 dark:text-amber-300 text-xs tracking-wide">無料プランは上位 10 件まで</p>
+            <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">Pro プランで全件表示・CSV・スイング / 長期 / 信用売りモード</p>
           </div>
           <Link
             href="/billing"
-            className="shrink-0 ml-4 bg-amber-500 hover:bg-amber-600 text-white px-4 py-1.5 rounded-lg font-semibold text-xs transition-colors"
+            className="shrink-0 ml-4 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded text-[10px] font-black transition-colors tracking-widest uppercase"
           >
-            アップグレード →
+            Upgrade →
           </Link>
         </div>
       )}
 
       {/* ── 投資スタイルタブ ── */}
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         <StyleTabBar current={styleTab} onChange={handleStyleChange} isPro={isPro} />
-
-        {/* スタイル説明ヒント */}
-        <div className={`flex items-start gap-2 px-3.5 py-2.5 rounded-xl text-xs ${
+        <div className={`flex items-start gap-2 px-3 py-2 rounded border text-[10px] font-semibold ${
           styleTab === "short"
-            ? "bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800/40"
-            : "bg-brand-50 dark:bg-brand-900/10 text-brand-700 dark:text-brand-300 border border-brand-100 dark:border-brand-800/40"
+            ? "bg-red-50 dark:bg-red-900/8 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/40"
+            : "bg-teal-50 dark:bg-teal-900/8 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-900/40"
         }`}>
-          <Lightbulb size={13} className="shrink-0 mt-0.5" />
+          <Activity size={11} className="shrink-0 mt-0.5" />
           <span>{styleConfig.hint}</span>
         </div>
       </div>
@@ -531,9 +536,9 @@ export default function HomePage() {
             <button
               onClick={handleCsvDownload}
               disabled={csvLoading}
-              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400 border border-brand-200 dark:border-brand-700 hover:bg-brand-100 dark:hover:bg-brand-900/30 transition-colors disabled:opacity-50"
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-black bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition-colors disabled:opacity-50 uppercase tracking-widest"
             >
-              <Download size={13} />
+              <Download size={11} />
               {csvLoading ? "処理中..." : "CSV"}
             </button>
           )}
@@ -545,58 +550,58 @@ export default function HomePage() {
         <ProLockedOverlay label={styleConfig.label} />
       ) : sigLoading ? (
         <>
-          <div className="md:hidden space-y-3">
+          <div className="md:hidden space-y-2.5">
             {[...Array(5)].map((_, i) => <SignalCardSkeleton key={i} />)}
           </div>
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-700">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-slate-800 text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+          <div className="hidden md:block overflow-hidden rounded border border-slate-200 dark:border-[#1a2740]">
+            <table className="w-full text-sm terminal-table">
+              <thead>
                 <tr>
-                  {["銘柄", "日付", "シグナル", signalFilter === "DOWN" ? "下落確率" : "上昇確率", "実績", "的中", "AI"].map(h => (
-                    <th key={h} className="px-4 py-3 text-left">{h}</th>
+                  {["銘柄", "日付", "シグナル", "確率", "実績", "的中", "解説"].map(h => (
+                    <th key={h} className="text-left">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-700/60">
+              <tbody>
                 {[...Array(8)].map((_, i) => <SignalRowSkeleton key={i} />)}
               </tbody>
             </table>
           </div>
         </>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <p className="text-lg">シグナルなし</p>
-          <p className="text-sm mt-1">
+        <div className="text-center py-16 text-slate-400">
+          <p className="text-sm font-black tracking-widest uppercase mb-1">No Signals</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">
             {(signalData?.signals ?? []).length > 0
-              ? `確度 ${minProb}% 以上のシグナルがありません（スライダーを下げてみてください）`
+              ? `確度 ${minProb}% 以上のシグナルがありません`
               : "本日のシグナルはまだ生成されていません"
             }
           </p>
         </div>
       ) : (
         <>
-          {/* モバイル: カードレイアウト */}
-          <div className="md:hidden space-y-3">
+          {/* モバイル: カード */}
+          <div className="md:hidden space-y-2.5">
             {filtered.map((s: Signal) => (
               <SignalCard key={`${s.Code}-${s.Date}`} s={s} />
             ))}
           </div>
 
-          {/* デスクトップ: テーブルレイアウト */}
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-700">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-slate-800/80 text-xs text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+          {/* デスクトップ: テーブル */}
+          <div className="hidden md:block overflow-hidden rounded border border-slate-200 dark:border-[#1a2740]">
+            <table className="w-full text-sm terminal-table">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left">銘柄</th>
-                  <th className="px-4 py-3 text-left">日付</th>
-                  <th className="px-4 py-3 text-center">シグナル</th>
-                  <th className="px-4 py-3 text-left">{signalFilter === "DOWN" ? "下落確率" : "上昇確率"}</th>
-                  <th className="px-4 py-3 text-right">実績</th>
-                  <th className="px-4 py-3 text-center">的中</th>
-                  <th className="px-4 py-3 text-center">AI</th>
+                  <th className="text-left">銘柄</th>
+                  <th className="text-left">日付</th>
+                  <th className="text-center">シグナル</th>
+                  <th className="text-left">{signalFilter === "DOWN" ? "下落確率" : "上昇確率"}</th>
+                  <th className="text-right">実績</th>
+                  <th className="text-center">的中</th>
+                  <th className="text-center">解説</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-700/60 bg-white dark:bg-slate-800/40">
+              <tbody className="bg-white dark:bg-[#0c1424]">
                 {filtered.map((s: Signal) => (
                   <SignalRow key={`${s.Code}-${s.Date}`} s={s} activeFilter={signalFilter} />
                 ))}

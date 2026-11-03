@@ -4,42 +4,38 @@
 
 /* ── デザイントークン ────────────────────────────────────────────────────── */
 :root {
-  --bg:           #f8fafc;
+  --bg:           #f0f4f8;
   --bg-card:      #ffffff;
-  --fg:           #0f172a;
-  --fg-muted:     #64748b;
-  --border:       #e2e8f0;
-  --brand:        #16a34a;
-  --brand-light:  #dcfce7;
-  --danger:       #e11d48;
-  --danger-light: #ffe4e6;
+  --fg:           #0d1526;
+  --fg-muted:     #5a6d85;
+  --border:       #dde4ed;
+  --brand:        #0a9b87;      /* ティール — 上昇/ポジティブ */
+  --brand-light:  #d1faf4;
+  --danger:       #dc2626;
+  --danger-light: #fee2e2;
 
-  /* グラデーション */
-  --grad-up:   linear-gradient(135deg, #16a34a11 0%, transparent 60%);
-  --grad-down: linear-gradient(135deg, #e11d4811 0%, transparent 60%);
+  --grad-up:   linear-gradient(135deg, #0a9b8711 0%, transparent 60%);
+  --grad-down: linear-gradient(135deg, #dc262611 0%, transparent 60%);
 
-  /* シャドウ */
-  --shadow-card:      0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-card-hover:0 8px 24px rgba(0,0,0,0.09), 0 2px 8px rgba(0,0,0,0.05);
-  --shadow-nav:       0 1px 0 rgba(0,0,0,0.05);
-  --shadow-bottom-nav:0 -1px 0 rgba(0,0,0,0.06);
+  --shadow-card:      0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-card-hover:0 6px 20px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-nav:       0 1px 0 rgba(0,0,0,0.06);
 }
 
 .dark {
-  --bg:           #080f1e;
-  --bg-card:      #0f1a2e;
-  --fg:           #f1f5f9;
-  --fg-muted:     #64748b;
-  --border:       #1e2d45;
-  --brand:        #4ade80;
-  --brand-light:  #052e16;
-  --danger:       #fb7185;
-  --danger-light: #881337;
+  --bg:           #060b16;      /* 深い宇宙黒 */
+  --bg-card:      #0c1424;      /* ネイビーカード */
+  --fg:           #e2eaf5;
+  --fg-muted:     #4d6480;
+  --border:       #1a2740;
+  --brand:        #0de8c8;      /* 明るいティール */
+  --brand-light:  #042820;
+  --danger:       #ff4d6d;
+  --danger-light: #3d0a16;
 
-  --shadow-card:      0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-card-hover:0 8px 24px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.4);
-  --shadow-nav:       0 1px 0 rgba(0,0,0,0.3);
-  --shadow-bottom-nav:0 -1px 0 rgba(0,0,0,0.3);
+  --shadow-card:      0 1px 4px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-card-hover:0 8px 28px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.5);
+  --shadow-nav:       0 1px 0 rgba(0,0,0,0.5);
 }
 
 body {
@@ -50,31 +46,30 @@ body {
 }
 
 /* ── スクロールバー ──────────────────────────────────────────────────────── */
-::-webkit-scrollbar            { width: 5px; height: 5px; }
+::-webkit-scrollbar            { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track      { background: transparent; }
-::-webkit-scrollbar-thumb      { background: #cbd5e1; border-radius: 9999px; }
-.dark ::-webkit-scrollbar-thumb{ background: #1e2d45; }
+::-webkit-scrollbar-thumb      { background: #94a3b8; border-radius: 9999px; }
+.dark ::-webkit-scrollbar-thumb{ background: #1a2740; }
 
-/* スクロールバー非表示ユーティリティ */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* ── フォーカスリング ────────────────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid #22c55e;
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 /* ── スケルトンシマー ────────────────────────────────────────────────────── */
 .skeleton {
-  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background: linear-gradient(90deg, #dde4ed 25%, #edf1f6 50%, #dde4ed 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite linear;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 .dark .skeleton {
-  background: linear-gradient(90deg, #1e2d45 25%, #263347 50%, #1e2d45 75%);
+  background: linear-gradient(90deg, #1a2740 25%, #202f4a 50%, #1a2740 75%);
   background-size: 200% 100%;
 }
 
@@ -94,50 +89,57 @@ body {
 
 /* ── ページフェードイン ──────────────────────────────────────────────────── */
 main > * {
-  animation: fade-in-page 0.28s cubic-bezier(0.16,1,0.3,1) both;
+  animation: fade-in-page 0.24s cubic-bezier(0.16,1,0.3,1) both;
 }
 @keyframes fade-in-page {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ── 確率バー ────────────────────────────────────────────────────────────── */
 .prob-bar-track {
-  height: 6px;
+  height: 4px;
   border-radius: 9999px;
-  background: #e2e8f0;
+  background: var(--border);
   overflow: hidden;
 }
-.dark .prob-bar-track { background: #1e2d45; }
 .prob-bar-fill {
   height: 100%;
   border-radius: 9999px;
-  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ── Live dot ─────────────────────────────────────────────────────────────── */
 .live-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 9999px;
-  background: #22c55e;
-  animation: live-pulse 2s ease-in-out infinite;
+  background: var(--brand);
+  animation: live-pulse 2.4s ease-in-out infinite;
 }
 @keyframes live-pulse {
-  0%, 100% { box-shadow: 0 0 0 0   rgba(34,197,94,0.5); }
-  50%       { box-shadow: 0 0 0 5px rgba(34,197,94,0);   }
+  0%, 100% { box-shadow: 0 0 0 0   color-mix(in srgb, var(--brand) 60%, transparent); }
+  50%       { box-shadow: 0 0 0 5px color-mix(in srgb, var(--brand) 0%,  transparent); }
+}
+/* フォールバック（color-mix非対応ブラウザ） */
+.dark .live-dot {
+  animation: live-pulse-dark 2.4s ease-in-out infinite;
+}
+@keyframes live-pulse-dark {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(13,232,200,0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(13,232,200,0);   }
 }
 
 /* ── ナビゲーションバー ──────────────────────────────────────────────────── */
 .navbar-glass {
-  backdrop-filter: saturate(180%) blur(16px);
-  -webkit-backdrop-filter: saturate(180%) blur(16px);
-  background: rgba(248,250,252,0.88);
-  border-bottom: 1px solid rgba(226,232,240,0.7);
+  backdrop-filter: saturate(160%) blur(20px);
+  -webkit-backdrop-filter: saturate(160%) blur(20px);
+  background: rgba(240,244,248,0.90);
+  border-bottom: 1px solid rgba(221,228,237,0.8);
 }
 .dark .navbar-glass {
-  background: rgba(8,15,30,0.90);
-  border-bottom-color: rgba(30,45,69,0.8);
+  background: rgba(6,11,22,0.92);
+  border-bottom: 1px solid rgba(26,39,64,0.9);
 }
 
 /* ── ボトムナビ ──────────────────────────────────────────────────────────── */
@@ -147,15 +149,15 @@ main > * {
   left: 0;
   right: 0;
   z-index: 50;
-  backdrop-filter: saturate(180%) blur(16px);
-  -webkit-backdrop-filter: saturate(180%) blur(16px);
-  background: rgba(248,250,252,0.92);
-  border-top: 1px solid rgba(226,232,240,0.7);
+  backdrop-filter: saturate(160%) blur(20px);
+  -webkit-backdrop-filter: saturate(160%) blur(20px);
+  background: rgba(240,244,248,0.94);
+  border-top: 1px solid rgba(221,228,237,0.8);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .dark .bottom-nav {
-  background: rgba(8,15,30,0.94);
-  border-top-color: rgba(30,45,69,0.8);
+  background: rgba(6,11,22,0.96);
+  border-top: 1px solid rgba(26,39,64,0.9);
 }
 .bottom-nav-item {
   display: flex;
@@ -165,31 +167,30 @@ main > * {
   gap: 3px;
   padding: 8px 4px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   color: #94a3b8;
   transition: color 0.15s ease, transform 0.15s ease;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   flex: 1;
   min-height: 56px;
 }
-.dark .bottom-nav-item           { color: #475569; }
-.bottom-nav-item.active          { color: #16a34a; }
-.dark .bottom-nav-item.active    { color: #4ade80; }
+.dark .bottom-nav-item           { color: #334f70; }
+.bottom-nav-item.active          { color: #0a9b87; }
+.dark .bottom-nav-item.active    { color: #0de8c8; }
 .bottom-nav-item:active          { transform: scale(0.9); }
 
-/* アクティブ時インジケーター（上端バー）*/
 .bottom-nav-item.active::before {
   content: "";
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 24px;
+  width: 28px;
   height: 2px;
   border-radius: 9999px;
-  background: #16a34a;
+  background: var(--brand);
 }
-.dark .bottom-nav-item.active::before { background: #4ade80; }
 
 .bottom-nav-item { position: relative; }
 
@@ -199,32 +200,78 @@ main > * {
 }
 
 /* ── シグナルカード ──────────────────────────────────────────────────────── */
+/* ターミナル風: 細いボーダー＋左アクセントライン */
 .signal-card-v2 {
   background: var(--bg-card);
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);
   overflow: hidden;
-  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
 }
 .signal-card-v2:hover {
   box-shadow: var(--shadow-card-hover);
-  border-color: #cbd5e1;
-  transform: translateY(-1px);
 }
-.dark .signal-card-v2:hover { border-color: #263347; }
-.signal-card-v2:active { transform: scale(0.985); }
+.signal-card-v2.up   { border-left: 3px solid #0a9b87; }
+.signal-card-v2.down { border-left: 3px solid #dc2626; }
+.dark .signal-card-v2.up   { border-left-color: #0de8c8; }
+.dark .signal-card-v2.down { border-left-color: #ff4d6d; }
+.signal-card-v2:active { opacity: 0.92; }
 
 /* ── グラス効果カード ─────────────────────────────────────────────────────── */
 .glass-card {
-  background: rgba(255,255,255,0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.8);
+  background: rgba(255,255,255,0.65);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.75);
   box-shadow: 0 4px 16px rgba(0,0,0,0.06);
 }
 .dark .glass-card {
-  background: rgba(15,26,46,0.75);
-  border-color: rgba(30,45,69,0.6);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  background: rgba(12,20,36,0.80);
+  border-color: rgba(26,39,64,0.7);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+/* ── データターミナル: 罫線テーブル ──────────────────────────────────────── */
+.terminal-table thead th {
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  padding: 10px 14px;
+}
+.terminal-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s ease;
+}
+.dark .terminal-table tbody tr { border-bottom-color: #1a2740; }
+.terminal-table tbody tr:hover { background: rgba(13,232,200,0.04); }
+.dark .terminal-table tbody tr:last-child { border-bottom: none; }
+
+/* ── Ticker モノスペース ─────────────────────────────────────────────────── */
+.ticker {
+  font-family: ui-monospace, 'JetBrains Mono', 'Cascadia Code', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+}
+
+/* ── パルスアニメーション (Pro バッジなど) ──────────────────────────────── */
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
+}
+.badge-live {
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+/* ── セクション区切り線 ──────────────────────────────────────────────────── */
+.section-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
 }
