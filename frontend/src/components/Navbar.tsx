@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Moon, Sun, BarChart2, Bookmark, User, ShieldCheck, Wallet, Menu, X, TrendingUp } from "lucide-react";
+import { Moon, Sun, BarChart2, Bookmark, User, ShieldCheck, Wallet, Menu, X, TrendingUp, FlaskConical } from "lucide-react";
 
 function NavLink({ href, children, onClick }: { href: string; children: React.ReactNode; onClick?: () => void }) {
   const pathname = usePathname();
@@ -212,6 +212,7 @@ export function Navbar() {
             <>
               <DrawerLink href="/" icon={<BarChart2 size={15} />} label="シグナル" onClick={closeDrawer} />
               <DrawerLink href="/backtest" icon={<BarChart2 size={15} />} label="バックテスト" onClick={closeDrawer} />
+              <DrawerLink href="/paper" icon={<FlaskConical size={15} />} label="模擬売買" onClick={closeDrawer} />
               <DrawerLink href="/watchlist" icon={<Bookmark size={15} />} label="ウォッチリスト" onClick={closeDrawer} />
               <DrawerLink href="/assets" icon={<Wallet size={15} />} label="資産管理" onClick={closeDrawer} />
               <DrawerLink href="/account" icon={<User size={15} />} label="アカウント" onClick={closeDrawer} />

@@ -24,6 +24,7 @@ interface StopLossPoint {
   rationale: string;
 }
 interface IctAnalysis {
+  _demo?: boolean;
   decision: "BUY" | "SELL" | "NO_TRADE";
   decision_strength: "強" | "中" | "弱";
   current_price_area: string;
@@ -167,6 +168,17 @@ export default function IctPage() {
         {/* 結果 */}
         {result && a && !loading && (
           <>
+            {/* デモバナー */}
+            {a._demo && (
+              <div className="rounded border border-amber-700/50 bg-amber-900/20 px-4 py-2.5 flex items-center gap-2">
+                <AlertTriangle size={14} className="text-amber-400 flex-shrink-0" />
+                <p className="text-xs text-amber-300">
+                  <span className="font-black">DEMO MODE</span> — OpenAI API キーが未設定のためサンプルデータを表示しています。
+                  本番環境では実際の GPT-4o Vision 分析が行われます。
+                </p>
+              </div>
+            )}
+
             {/* 判定サマリー */}
             <div className={clsx("rounded border p-4 flex items-center gap-4", decisionBg(a.decision))}>
               {decisionIcon(a.decision)}

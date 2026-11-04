@@ -210,3 +210,50 @@ export const getAdminUsers    = (page = 1) => apiFetch<{ users: AdminUser[]; tot
 export const getAdminSignals  = (days = 30) => apiFetch<{ data: AdminSignalDaily[] }>(`/api/admin/signals/daily?days=${days}`);
 export const getAdminMetrics  = () => apiFetch<{ metrics: AdminModelMetric[] }>("/api/admin/model/metrics");
 export const getAdminFeatures = (top_n = 20) => apiFetch<{ features: AdminFeature[]; trained_at: string | null; mode: string | null }>(`/api/admin/model/features?top_n=${top_n}`);
+
+// ── ペーパートレード ─────────────────────────────────────────────────────────
+export interface PaperTrade {
+  id: number;
+  code: string;
+  company_name: string | null;
+  signal: "UP" | "DOWN";
+  entry_price: number;
+  shares: number;
+  entry_date: string;
+  exit_price: number | null;
+  exit_date: string | null;
+  status: "open" | "closed";
+  note: string | null;
+  pnl: number | null;
+  pnl_pct: number | null;
+}
+
+export interface PaperTradeStats {
+  total: number;
+  win: number;
+  loss: number;
+  win_rate: number | null;
+  total_pnl: number;
+  avg_pnl_pct: number | null;
+  best_pnl?: number;
+  worst_pnl?: number;
+}
+
+export const getPaperTrades = (status?: string) =>
+  apiFetch<PaperTrade[]>(`/api/paper-trades${status ? `?status=${status}` : ""}`);
+
+export const getPaperTradeStats = () => apiFetch<PaperTradeStats>("/api/paper-trades/stats");
+
+export const createPaperTrade = (body: {
+  code: string; signal: string; entry_price: number; shares: number;
+  entry_date: string; note?: string;
+}) => apiFetch<{ id: number }>("/api/paper-trades", { method: "POST", body: JSON.stringify(body) });
+
+export const closePaperTrade = (id: number, exit_price: number, exit_date: string) =>
+  apiFetch<{ status: string }>(`/api/paper-trades/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ exit_price, exit_date }),
+  });
+
+export const deletePaperTrade = (id: number) =>
+  apiFetch<void>(`/api/paper-trades/${id}`, { method: "DELETE" });

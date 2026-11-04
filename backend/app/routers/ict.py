@@ -33,6 +33,118 @@ router = APIRouter(prefix="/api/ict", tags=["ict"])
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+# ── デモ用モック分析（APIキー不要） ────────────────────────────────────────────
+import random
+
+def _mock_analysis(code: str, last_close: float, company_name: str) -> dict:
+    """OpenAI キー未設定時のリアルなデモ分析データを生成"""
+    rng = random.Random(hash(code) % 9999)
+    is_buy = rng.random() > 0.4
+    decision = "BUY" if is_buy else ("SELL" if rng.random() > 0.4 else "NO_TRADE")
+    strength = rng.choice(["強", "中", "弱"])
+
+    # 価格帯をリアルに
+    pct_entry  = rng.uniform(0.001, 0.008)
+    pct_sl     = rng.uniform(0.015, 0.030)
+    pct_tp1    = rng.uniform(0.020, 0.040)
+    pct_tp2    = rng.uniform(0.045, 0.080)
+
+    if decision == "BUY":
+        entry_price = round(last_close * (1 - pct_entry), 0)
+        sl_price    = round(last_close * (1 - pct_sl), 0)
+        tp1_price   = round(last_close * (1 + pct_tp1), 0)
+        tp2_price   = round(last_close * (1 + pct_tp2), 0)
+        rr1 = round(pct_tp1 / pct_sl, 1)
+        rr2 = round(pct_tp2 / pct_sl, 1)
+        structure = "上位足で高値切り上げ継続。直近 MSS（市場構造転換）が確認され、買い優位のバイアスが継続中。"
+        dol = f"前週高値 ¥{round(last_close * (1 + pct_tp2 * 0.6)):,} 付近の BSL（Buy-Side Liquidity）が主要ターゲット。"
+        area = "ディスカウント帯（レンジ下半分）からのリバウンド局面"
+        entry_zone = f"日足 OB（Order Block）¥{entry_price:,.0f}〜¥{round(entry_price * 1.005):,.0f} ゾーン"
+        entry_trigger = "日足終値で OB 上限を上抜け + 出来高増加を確認"
+        sl_rationale = "OB 下限を終値で割り込んだ場合、シナリオ崩壊と判断"
+        tp1_rationale = "直近スイング高値付近の FVG（Fair Value Gap）充填ゾーン"
+        tp2_rationale = "上位足 DOL（流動性ターゲット）前週高値"
+        confluences = [
+            "HTF（週足）: 高値切り上げ継続で上昇トレンド構造を維持",
+            f"MTF（日足）: ディスカウント帯 OB からの反発確認",
+            "LTF（短期日足）: MSS 形成後の押し目待ち状態",
+            "出来高: 直近 2 日間で 20 日平均の 1.8 倍に増加",
+        ]
+        invalidation = f"¥{sl_price:,.0f} を日足終値で下抜けた場合、下落トレンド転換の可能性。ポジション撤退。"
+        warnings = ["重要指標発表日（翌週）はサイズ縮小を推奨", "エントリー前に出来高急増を確認すること"]
+    elif decision == "SELL":
+        entry_price = round(last_close * (1 + pct_entry), 0)
+        sl_price    = round(last_close * (1 + pct_sl), 0)
+        tp1_price   = round(last_close * (1 - pct_tp1), 0)
+        tp2_price   = round(last_close * (1 - pct_tp2), 0)
+        rr1 = round(pct_tp1 / pct_sl, 1)
+        rr2 = round(pct_tp2 / pct_sl, 1)
+        structure = "上位足で安値切り下げが発生。BOS（Break of Structure）後に戻り売り局面へ移行中。"
+        dol = f"前週安値 ¥{round(last_close * (1 - pct_tp2 * 0.6)):,} 付近の SSL（Sell-Side Liquidity）をターゲット。"
+        area = "プレミアム帯（レンジ上半分）での戻り売り局面"
+        entry_zone = f"日足 Bearish OB ¥{entry_price:,.0f}〜¥{round(entry_price * 1.008):,.0f} ゾーン"
+        entry_trigger = "日足終値で Bearish OB 下限を下抜け + 上ヒゲ確認"
+        sl_rationale = "Bearish OB 上限を終値で上抜けた場合、反転シナリオへ切り替え"
+        tp1_rationale = "直近スイング安値付近の IFVG（反転 FVG）サポートゾーン"
+        tp2_rationale = "下位足 DOL（流動性ターゲット）前週安値"
+        confluences = [
+            "HTF（週足）: 安値切り下げで下降トレンド構造が確認済み",
+            "MTF（日足）: プレミアム帯 Bearish OB でレジスタンス反応",
+            "LTF（短期日足）: BOS 形成後の戻り売りエントリー待機中",
+            "RSI: 60 超の過熱域からの下落サイン",
+        ]
+        invalidation = f"¥{sl_price:,.0f} を日足終値で上抜けた場合、上昇継続の可能性。即時撤退。"
+        warnings = ["板が薄い時間帯のエントリーは避けること", "週またぎのポジション保有はリスク管理を厳格に"]
+    else:
+        entry_price = sl_price = tp1_price = tp2_price = None
+        rr1 = rr2 = 0
+        structure = "上位足・下位足で方向性が一致せず、横ばい相場が継続中。"
+        dol = "明確な流動性ターゲットが確認できない。エッジのないレンジ相場。"
+        area = "レンジ中央（Equilibrium）付近で方向感なし"
+        entry_zone = "エントリー見送り"
+        entry_trigger = "明確なセットアップ出現まで待機"
+        sl_rationale = "エントリーなし"
+        tp1_rationale = "エントリーなし"
+        tp2_rationale = "エントリーなし"
+        confluences = [
+            "HTF・MTF でトレンド方向が一致しない",
+            "レンジ中央付近で優位性が低い",
+            "出来高が平均を下回りモメンタム欠如",
+        ]
+        invalidation = "明確な BOS または MSS が出現するまでウォッチリスト登録のみ推奨"
+        warnings = ["強いセットアップが出るまで待機が最善", "焦ってのエントリーは損失の元"]
+
+    return {
+        "decision": decision,
+        "decision_strength": strength,
+        "current_price_area": area,
+        "dol": dol,
+        "structure": structure,
+        "entry": {
+            "price": entry_price,
+            "zone": entry_zone,
+            "trigger": entry_trigger,
+        },
+        "stop_loss": {
+            "price": sl_price,
+            "rationale": sl_rationale,
+        },
+        "take_profit_1": {
+            "price": tp1_price,
+            "rationale": tp1_rationale,
+            "rr": f"{rr1}R",
+        },
+        "take_profit_2": {
+            "price": tp2_price,
+            "rationale": tp2_rationale,
+            "rr": f"{rr2}R",
+        },
+        "key_confluences": confluences,
+        "invalidation": invalidation,
+        "risk_warnings": warnings,
+        "_demo": True,  # デモデータであることを示すフラグ
+    }
+
 
 # ── チャート描画ユーティリティ ──────────────────────────────────────────────
 
@@ -197,8 +309,18 @@ async def run_ict_analysis(
     if current_user.plan != "pro":
         raise HTTPException(status_code=403, detail="ICT分析はProプラン専用です")
 
+    # OpenAI キー未設定 → デモモック
     if not OPENAI_API_KEY:
-        raise HTTPException(status_code=503, detail="OpenAI API キーが設定されていません")
+        chart_b64 = generate_charts(daily_rows) if len(daily_rows) >= 20 else ""
+        analysis = _mock_analysis(code, last_close, company_name)
+        return {
+            "code": code,
+            "company_name": company_name,
+            "last_close": last_close,
+            "last_date": last_date,
+            "chart_image": f"data:image/png;base64,{chart_b64}" if chart_b64 else None,
+            "analysis": analysis,
+        }
 
     # 銘柄名取得
     stock_row = await db.execute(

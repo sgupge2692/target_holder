@@ -80,6 +80,25 @@ ASSET_CATEGORIES = [
 ]
 
 
+class PaperTrade(Base):
+    """ペーパートレード記録（仮想売買）"""
+    __tablename__ = "paper_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    signal: Mapped[str] = mapped_column(String(10), nullable=False)         # UP / DOWN
+    entry_price: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    shares: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    entry_date: Mapped[Date] = mapped_column(Date, nullable=False)          # type: ignore[valid-type]
+    exit_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    exit_date: Mapped[Date | None] = mapped_column(Date, nullable=True)     # type: ignore[valid-type]
+    status: Mapped[str] = mapped_column(String(10), default="open")         # open / closed
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
 class AssetAccount(Base):
     """資産口座・項目マスタ（ユーザーが自由に追加）"""
     __tablename__ = "asset_accounts"
