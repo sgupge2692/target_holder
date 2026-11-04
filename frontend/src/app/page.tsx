@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { getLatestSignals, getAccuracy, downloadSignalsCsv, type Signal, type AccuracyRow } from "@/lib/api";
 import { SignalBadge } from "@/components/SignalBadge";
@@ -13,7 +14,7 @@ import {
   ChevronDown, ChevronRight, Download, Lightbulb,
   SlidersHorizontal, TrendingUp, TrendingDown,
   Zap, RefreshCw, BarChart3, TrendingDown as ShortIcon, Lock,
-  Activity,
+  Activity, Layers,
 } from "lucide-react";
 
 // ── タブ定義 ─────────────────────────────────────────────────────────────────
@@ -306,8 +307,9 @@ function SignalRow({ s }: { s: Signal }) {
 }
 
 // ── シグナルカード（モバイル）──────────────────────────────────────────────
-function SignalCard({ s }: { s: Signal }) {
+function SignalCard({ s, isPro }: { s: Signal; isPro: boolean }) {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
   const keyFactors: string[] = (() => {
     try { return s.key_factors ? JSON.parse(s.key_factors) : []; } catch { return []; }
   })();
@@ -366,42 +368,58 @@ function SignalCard({ s }: { s: Signal }) {
         )}
       </Link>
 
-      {s.explanation && (
-        <>
+      {/* ICT 分析ボタン（Pro 専用） */}
+      <div className="flex border-t border-slate-100 dark:border-[#1a2740]">
+        {s.explanation && (
           <button
             onClick={() => setOpen(v => !v)}
-            className={`w-full flex items-center justify-center gap-1.5 text-[10px] py-2 border-t font-black tracking-widest uppercase transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-1.5 text-[10px] py-2 font-black tracking-widest uppercase transition-colors ${
               isDown
-                ? "border-red-100 dark:border-red-900/30 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10"
-                : "border-teal-100 dark:border-teal-900/30 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/10"
+                ? "text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10"
+                : "text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/10"
             }`}
           >
             <Lightbulb size={11} />
-            {open ? "閉じる" : "解説を見る"}
+            {open ? "閉じる" : "解説"}
           </button>
-          {open && (
-            <div className={`px-4 py-3 text-xs leading-relaxed ${
-              isDown
-                ? "bg-red-50 dark:bg-red-900/10 text-red-900 dark:text-red-200"
-                : "bg-teal-50 dark:bg-teal-900/10 text-teal-900 dark:text-teal-200"
-            }`}>
-              <p>{s.explanation}</p>
-              {keyFactors.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {keyFactors.map((f, i) => (
-                    <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                      isDown
-                        ? "bg-red-100 dark:bg-red-800/40 text-red-700 dark:text-red-300"
-                        : "bg-teal-100 dark:bg-teal-800/40 text-teal-700 dark:text-teal-300"
-                    }`}>
-                      {f}
-                    </span>
-                  ))}
-                </div>
-              )}
+        )}
+        <button
+          onClick={() => isPro ? router.push(`/ict/${s.Code}`) : null}
+          title={isPro ? "ICT 詳細分析" : "Pro プランで利用可能"}
+          className={`flex items-center justify-center gap-1.5 text-[10px] py-2 font-black tracking-widest uppercase transition-colors ${
+            s.explanation ? "border-l border-slate-100 dark:border-[#1a2740] flex-1" : "flex-1"
+          } ${
+            isPro
+              ? "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/10"
+              : "text-slate-500 cursor-default opacity-50"
+          }`}
+        >
+          <Layers size={11} />
+          ICT 分析
+        </button>
+      </div>
+
+      {s.explanation && open && (
+        <div className={`px-4 py-3 text-xs leading-relaxed ${
+          isDown
+            ? "bg-red-50 dark:bg-red-900/10 text-red-900 dark:text-red-200"
+            : "bg-teal-50 dark:bg-teal-900/10 text-teal-900 dark:text-teal-200"
+        }`}>
+          <p>{s.explanation}</p>
+          {keyFactors.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {keyFactors.map((f, i) => (
+                <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                  isDown
+                    ? "bg-red-100 dark:bg-red-800/40 text-red-700 dark:text-red-300"
+                    : "bg-teal-100 dark:bg-teal-800/40 text-teal-700 dark:text-teal-300"
+                }`}>
+                  {f}
+                </span>
+              ))}
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -583,7 +601,7 @@ export default function HomePage() {
           {/* モバイル: カード */}
           <div className="md:hidden space-y-2.5">
             {filtered.map((s: Signal) => (
-              <SignalCard key={`${s.Code}-${s.Date}`} s={s} />
+              <SignalCard key={`${s.Code}-${s.Date}`} s={s} isPro={isPro} />
             ))}
           </div>
 
@@ -603,7 +621,7 @@ export default function HomePage() {
               </thead>
               <tbody className="bg-white dark:bg-[#0c1424]">
                 {filtered.map((s: Signal) => (
-                  <SignalRow key={`${s.Code}-${s.Date}`} s={s} activeFilter={signalFilter} />
+                  <SignalRow key={`${s.Code}-${s.Date}`} s={s} />
                 ))}
               </tbody>
             </table>

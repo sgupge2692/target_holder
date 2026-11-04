@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.routers import auth, billing, signals, stocks, summary, notifications, admin, watchlist, assets
+from app.routers import auth, billing, signals, stocks, summary, notifications, admin, watchlist, assets, ict
 from app.limiter import limiter
 from app.metrics import metrics_output
 from app.middleware import MetricsMiddleware
@@ -82,6 +82,7 @@ app.include_router(notifications.router)
 app.include_router(admin.router)
 app.include_router(watchlist.router)
 app.include_router(assets.router)
+app.include_router(ict.router)
 
 
 @app.get("/api/health")

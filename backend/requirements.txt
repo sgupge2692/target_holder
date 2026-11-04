@@ -17,6 +17,8 @@ stripe==9.9.0
 python-dotenv==1.0.1
 slowapi==0.1.9
 prometheus-client==0.20.0
+matplotlib==3.8.4
+numpy==1.26.4
 
 # テスト
 pytest==8.2.0
