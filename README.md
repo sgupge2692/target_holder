@@ -1,75 +1,156 @@
-# かぶみ
+# KABUMI — 日本株 AI シグナル
 
-日本株特化のAI株価予測・企業要約サービス
+LightGBM × XGBoost アンサンブルによる翌日騰落予測 + 資産管理 Web アプリ。
 
-## セットアップ
+## スタック
 
-### 必要なもの
-- Docker / Docker Compose
-- J-Quants APIキー（https://jpx-jquants.com）
-- OpenAI APIキー
+| レイヤー | 技術 |
+|---|---|
+| フロントエンド | Next.js 14 (App Router) + Tailwind CSS |
+| バックエンド | FastAPI + SQLAlchemy (async) + Alembic |
+| ML | LightGBM / XGBoost / scikit-learn |
+| DB | PostgreSQL |
+| キャッシュ | Redis |
+| インフラ | Docker Compose |
+| データ | J-Quants API（無料ティア: 2年分の日足）|
 
-### 手順
+---
+
+## ローカルで動かす
+
+### 1. 必要なもの
+
+- **Docker Desktop**（または Docker Engine + Compose plugin）
+- **J-Quants アカウント**（無料）→ https://jpx-jquants.com
+  - 登録後にメールアドレス・パスワードを控えておく
+- Git
+
+> Stripe・OpenAI・Sentry は任意。なくても起動・予測まで動作する。
+
+---
+
+### 2. クローン & 環境変数の設定
 
 ```bash
-# 1. リポジトリをクローン
-git clone https://github.com/YOUR_ORG/kabumi.git /opt/kabumi
-cd kabumi
+git clone https://github.com/sgupge2692/target_holder.git
+cd target_holder
 
-# 2. 環境変数を設定
 cp .env.example .env
-# .envをエディタで開いてAPIキーを記入
-
-# 3. 開発環境を起動
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
-
-# 4. 動作確認
-curl http://localhost:8000/health
-# → {"status": "ok"}
 ```
 
-### 各サービスのURL
-- フロントエンド: http://localhost:3000
-- バックエンドAPI: http://localhost:8000
-- API docs: http://localhost:8000/docs
+`.env` を開いて **最低限これだけ** 埋める：
 
-## MLパイプラインの手動実行
+```dotenv
+# J-Quants（必須）
+JQUANTS_MAIL_ADDRESS=your@email.com
+JQUANTS_PASSWORD=your-password
+
+# JWT（必須 — 何でも OK、32文字以上推奨）
+JWT_SECRET=change-me-to-something-random
+
+# 自分のメールアドレス → 自動で永久 Pro 付与
+OWNER_EMAILS=your@email.com
+ADMIN_EMAILS=your@email.com
+```
+
+---
+
+### 3. 起動
 
 ```bash
-# データ取得
-docker compose exec ml python pipeline/fetch_data.py
-
-# 特徴量計算
-docker compose exec ml python pipeline/feature_engineering.py
-
-# 学習（フル）
-docker compose exec ml python pipeline/train.py --mode full
-
-# 学習（逐次）
-docker compose exec ml python pipeline/train.py --mode incremental
-
-# 予測実行
-docker compose exec ml python pipeline/predict.py
+docker compose up --build
 ```
 
-## CI/CD（自動実行）
+初回は数分かかります。起動したら：
 
-GitHub ActionsのSelf-hosted runnerをローカルPCに設定することで、
-毎日15:35の日次パイプラインと毎週土曜深夜のフル再学習が自動実行されます。
+| URL | 内容 |
+|---|---|
+| http://localhost:3000 | フロントエンド |
+| http://localhost:8000/docs | FastAPI Swagger UI |
+| http://localhost:8000/health | ヘルスチェック |
 
-Self-hosted runnerの設定:
-1. GitHubリポジトリの Settings → Actions → Runners
-2. "New self-hosted runner" をクリック
-3. 指示に従ってローカルPCにrunnerをインストール
+---
+
+### 4. ML パイプラインを回す
+
+起動後、別ターミナルで順番に実行：
+
+```bash
+# ① 株価データ取得（J-Quants API → DB、初回は数分）
+docker compose run --rm ml python pipeline/fetch_data.py
+
+# ② 特徴量エンジニアリング
+docker compose run --rm ml python pipeline/feature_engineering.py
+
+# ③ 学習（LightGBM + XGBoost アンサンブル）
+docker compose run --rm ml python pipeline/train.py --mode ensemble
+
+# ④ 予測実行 → DB に保存
+docker compose run --rm ml python pipeline/predict.py
+```
+
+http://localhost:3000 を開くとシグナルが表示されます。
+
+---
 
 ## ディレクトリ構成
 
 ```
-kabumi/
-├── backend/        FastAPI バックエンド
-├── frontend/       Next.js フロントエンド
-├── ml/             機械学習パイプライン
-├── db/             DBスキーマ
-├── nginx/          リバースプロキシ設定
-└── .github/        CI/CD ワークフロー
+target_holder/
+├── backend/              FastAPI バックエンド
+│   ├── app/
+│   │   ├── routers/      エンドポイント (auth / signals / assets / ...)
+│   │   ├── models.py     SQLAlchemy モデル
+│   │   └── main.py       FastAPI アプリ
+│   └── alembic/          DB マイグレーション
+│
+├── frontend/             Next.js フロントエンド
+│   └── src/
+│       ├── app/          ページ (page.tsx / assets / backtest / ...)
+│       ├── components/   共通コンポーネント
+│       └── lib/          API クライアント
+│
+├── ml/                   機械学習パイプライン
+│   └── pipeline/
+│       ├── fetch_data.py          J-Quants から日足取得
+│       ├── feature_engineering.py テクニカル指標計算
+│       ├── train.py               LightGBM / XGBoost 学習
+│       └── predict.py             翌日シグナル生成
+│
+├── nginx/                リバースプロキシ設定
+├── .env.example          環境変数テンプレート
+├── docker-compose.yml    本番向け Compose
+└── LEARN.md              学習ロードマップ（ML / Web / MLOps）
 ```
+
+---
+
+## 主な機能
+
+- **シグナルフィード** — 毎日更新。UP / DOWN シグナルを確度付きで表示
+- **バックテスト** — 過去シグナルの的中率・平均リターンを確認
+- **ウォッチリスト** — 気になる銘柄を登録してまとめて追跡
+- **資産管理** — 現金・株・不動産・負債を登録して純資産推移を可視化
+- **Pro プラン** — スイング / 長期保有 / 信用売りモード + CSV エクスポート（Stripe 連携）
+
+---
+
+## よくある質問
+
+**Q: J-Quants の無料ティアで十分ですか？**
+A: はい。2年分の日足 + 銘柄情報が使えるので十分です。
+
+**Q: 予測はどのくらい当たりますか？**
+A: バックテスト上で UP シグナル約 60〜65% の的中率（市場環境に依存）。投資判断の参考として使ってください。
+
+**Q: OpenAI API キーがなくても動きますか？**
+A: 動きます。キーがない場合はシグナル解説文が非表示になるだけです。
+
+**Q: 本番公開したい場合は？**
+A: `docker-compose.prod.yml` に VPS 向けの設定があります。ドメイン取得 → Nginx SSL 設定 → Stripe 本番 Webhook 登録 の順で進めてください。
+
+---
+
+## ライセンス
+
+MIT
