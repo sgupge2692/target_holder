@@ -147,6 +147,10 @@ def main():
         if args.reset:
             print("Deleting existing data...")
             cur.execute("DELETE FROM predictions")
+            cur.execute("SELECT id FROM users WHERE email = %s", (DEMO_EMAIL,))
+            u = cur.fetchone()
+            if u:
+                cur.execute("DELETE FROM paper_trades WHERE user_id = %s", (u[0],))
             cur.execute("DELETE FROM listed_stocks WHERE code = ANY(%s)", ([c for c,*_ in STOCKS],))
             cur.execute("DELETE FROM users WHERE email = %s", (DEMO_EMAIL,))
             conn.commit()
@@ -205,6 +209,74 @@ def main():
                 )
             conn.commit()
             print(f"  Done. ({len(rows)} rows)")
+
+        # ── ペーパートレードデータ投入 ───────────────────────────────────────
+        cur.execute("SELECT id FROM users WHERE email = %s", (DEMO_EMAIL,))
+        demo_user = cur.fetchone()
+        if demo_user:
+            uid = demo_user[0]
+            cur.execute("SELECT COUNT(*) FROM paper_trades WHERE user_id = %s", (uid,))
+            pt_count = cur.fetchone()[0]
+
+            if pt_count > 0 and not args.reset:
+                print(f"paper_trades already has {pt_count} rows for demo user. Use --reset to overwrite.")
+            else:
+                if args.reset:
+                    cur.execute("DELETE FROM paper_trades WHERE user_id = %s", (uid,))
+                    conn.commit()
+
+                today_d = date.today()
+                rng_pt  = random.Random(99)
+                PT_TRADES = [
+                    # (code, signal, entry_price, shares, days_ago_entry, days_ago_exit_or_None, note)
+                    ("7203",  "UP",   3680.0, 100,  45, 38, "トヨタ 長期トレンド順張り"),
+                    ("6758",  "UP",   13200.0, 20, 40, 32, "ソニー 決算前の仕込み"),
+                    ("9984",  "DOWN", 8900.0,  50, 35, 28, "ソフトバンク 空売り"),
+                    ("8306",  "UP",   1180.0, 200, 30, 22, "三菱UFJ 金利上昇恩恵"),
+                    ("6861",  "UP",   68000.0,  5, 25, 18, "キーエンス 押し目買い"),
+                    ("7974",  "DOWN", 7200.0,  30, 20, 14, "任天堂 新作後の売り"),
+                    ("4063",  "UP",   5800.0,  50, 60, 50, "信越化学 半導体需要"),
+                    ("8035",  "UP",   22000.0, 10, 55, 45, "東京エレクトロン AI関連"),
+                    # オープン中
+                    ("9433",  "UP",   4850.0,  60, 10, None, "KDDI 高配当狙い"),
+                    ("2802",  "UP",   3200.0,  80, 7,  None, "味の素 ディフェンシブ"),
+                    ("4661",  "DOWN", 4100.0,  30, 5,  None, "オリランド 割高感"),
+                    ("6981",  "UP",   2800.0, 100, 3,  None, "村田 EV関連期待"),
+                ]
+
+                print(f"Inserting paper trade demo rows...")
+                for code, signal, entry_price, shares, d_entry, d_exit, note in PT_TRADES:
+                    entry_date = today_d - timedelta(days=d_entry)
+                    # 実際の株価に小さなランダム変動を加える
+                    ep = round(entry_price * rng_pt.uniform(0.97, 1.03), 0)
+
+                    if d_exit is not None:
+                        exit_date = today_d - timedelta(days=d_exit)
+                        # シグナル方向に合わせた終値（60〜70%的中）
+                        correct = rng_pt.random() < 0.65
+                        if signal == "UP":
+                            xp = ep * (rng_pt.uniform(1.015, 1.045) if correct else rng_pt.uniform(0.975, 0.995))
+                        else:
+                            xp = ep * (rng_pt.uniform(0.960, 0.985) if correct else rng_pt.uniform(1.010, 1.030))
+                        xp = round(xp, 0)
+                        status = "closed"
+                    else:
+                        exit_date = None
+                        xp = None
+                        status = "open"
+
+                    cur.execute(
+                        """
+                        INSERT INTO paper_trades
+                          (user_id, code, signal, entry_price, shares, entry_date,
+                           exit_price, exit_date, status, note)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        """,
+                        (uid, code, signal, ep, shares, entry_date,
+                         xp, exit_date, status, note),
+                    )
+                conn.commit()
+                print(f"  Done. ({len(PT_TRADES)} paper trades)")
 
         print()
         print("=" * 52)

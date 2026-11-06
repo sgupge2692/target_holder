@@ -619,7 +619,7 @@ export default function HomePage() {
                   <th className="text-center">解説</th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-[#0c1424]">
+              <tbody className="bg-[#0c1424]">
                 {filtered.map((s: Signal) => (
                   <SignalRow key={`${s.Code}-${s.Date}`} s={s} />
                 ))}

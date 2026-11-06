@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet,
-  Home, Car, PiggyBank, Landmark, Package, AlertCircle, RefreshCw,
-  ChevronDown, ChevronUp, Info, Zap, ArrowRight
+  Home, Car, PiggyBank, Landmark, Package, RefreshCw,
+  ChevronDown, ChevronUp, Zap, ArrowRight
 } from "lucide-react";
 
 // ─── シグナル型 ───────────────────────────────────────────────
@@ -25,14 +25,14 @@ function SignalSimulator({
   watchlist: WatchlistItem[];
   netWorth: number;
 }) {
-  const [investAmount, setInvestAmount] = useState(1000000); // デフォルト100万円
+  const [investAmount, setInvestAmount] = useState(1000000);
   const buySignals = watchlist.filter(
     w => w.signal === "buy" && w.up_probability !== null && w.up_probability > 0.55
   );
 
   if (buySignals.length === 0) {
     return (
-      <div className="text-center py-6 text-sm text-surface-400">
+      <div className="text-center py-6 text-sm text-slate-500">
         現在ウォッチリストに「買い」シグナルの銘柄がありません
       </div>
     );
@@ -40,9 +40,8 @@ function SignalSimulator({
 
   return (
     <div className="space-y-4">
-      {/* 投資額スライダー */}
       <div className="flex items-center gap-3">
-        <span className="text-xs text-surface-500 shrink-0">投資額</span>
+        <span className="text-xs text-slate-500 shrink-0">投資額</span>
         <input
           type="range"
           min={100000}
@@ -50,18 +49,16 @@ function SignalSimulator({
           step={100000}
           value={investAmount}
           onChange={e => setInvestAmount(Number(e.target.value))}
-          className="flex-1 accent-brand-500"
+          className="flex-1 accent-teal-500"
         />
-        <span className="text-sm font-bold text-surface-800 dark:text-surface-200 w-20 text-right">
+        <span className="text-sm font-black text-white w-20 text-right font-mono">
           {(investAmount / 10000).toFixed(0)}万円
         </span>
       </div>
 
-      {/* 銘柄別シミュレーション */}
       <div className="space-y-2">
         {buySignals.slice(0, 5).map(item => {
           const prob = item.up_probability!;
-          // 期待リターン: 上昇確率 × 平均上昇率(+3%) - 下降確率 × 平均下落率(-2%)
           const expectedReturn = prob * 0.03 - (1 - prob) * 0.02;
           const expectedGain = investAmount * expectedReturn;
           const newNetWorth = netWorth + expectedGain;
@@ -69,28 +66,28 @@ function SignalSimulator({
           const isPositive = expectedGain >= 0;
 
           return (
-            <div key={item.code} className="flex items-center gap-3 p-3 bg-surface-50 dark:bg-surface-800 rounded-xl">
+            <div key={item.code} className="flex items-center gap-3 p-3 bg-[#060b16] rounded">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-brand-600 dark:text-brand-400">{item.code}</span>
-                  <span className="text-xs text-surface-600 dark:text-surface-400 truncate">{item.company_name}</span>
+                  <span className="text-xs font-black text-teal-400 font-mono">{item.code}</span>
+                  <span className="text-xs text-slate-500 truncate">{item.company_name}</span>
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <div className="h-1.5 rounded-full bg-surface-200 dark:bg-surface-700 flex-1 overflow-hidden">
+                  <div className="h-1.5 rounded-full bg-slate-700 flex-1 overflow-hidden">
                     <div
-                      className="h-full bg-brand-500 rounded-full"
+                      className="h-full bg-teal-500 rounded-full"
                       style={{ width: `${prob * 100}%` }}
                     />
                   </div>
-                  <span className="text-xs text-surface-500">{(prob * 100).toFixed(0)}%</span>
+                  <span className="text-xs text-slate-500 font-mono">{(prob * 100).toFixed(0)}%</span>
                 </div>
               </div>
-              <ArrowRight size={12} className="text-surface-300 shrink-0" />
+              <ArrowRight size={12} className="text-slate-600 shrink-0" />
               <div className="text-right shrink-0">
-                <div className={`text-sm font-bold ${isPositive ? "text-brand-600 dark:text-brand-400" : "text-red-500"}`}>
+                <div className={`text-sm font-black font-mono ${isPositive ? "text-teal-400" : "text-red-400"}`}>
                   {isPositive ? "+" : ""}{(expectedGain / 10000).toFixed(1)}万円
                 </div>
-                <div className="text-xs text-surface-400">
+                <div className="text-xs text-slate-500 font-mono">
                   純資産 {isPositive ? "+" : ""}{changeRate.toFixed(2)}%
                 </div>
               </div>
@@ -99,7 +96,7 @@ function SignalSimulator({
         })}
       </div>
 
-      <p className="text-xs text-surface-400 text-center">
+      <p className="text-xs text-slate-600 text-center">
         ※ 期待値計算（上昇確率×+3% − 下降確率×2%）。投資判断の参考に限ります。
       </p>
     </div>
@@ -139,12 +136,12 @@ interface HistoryPoint {
 const CATEGORY_CONFIG: Record<Category, {
   label: string; color: string; bg: string; icon: React.ReactNode; isLiability?: boolean
 }> = {
-  cash:        { label: "現金・預金",     color: "text-blue-600 dark:text-blue-400",   bg: "bg-blue-50 dark:bg-blue-900/20",   icon: <PiggyBank size={16} /> },
-  stock:       { label: "株式・投資信託", color: "text-brand-600 dark:text-brand-400", bg: "bg-brand-50 dark:bg-brand-900/20", icon: <TrendingUp size={16} /> },
-  realestate:  { label: "不動産",         color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", icon: <Home size={16} /> },
-  vehicle:     { label: "車・乗り物",     color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-900/20", icon: <Car size={16} /> },
-  other:       { label: "その他資産",     color: "text-teal-600 dark:text-teal-400",   bg: "bg-teal-50 dark:bg-teal-900/20",   icon: <Package size={16} /> },
-  liability:   { label: "負債・ローン",   color: "text-red-600 dark:text-red-400",     bg: "bg-red-50 dark:bg-red-900/20",     icon: <Landmark size={16} />, isLiability: true },
+  cash:        { label: "現金・預金",     color: "text-blue-400",   bg: "bg-blue-900/20",   icon: <PiggyBank size={16} /> },
+  stock:       { label: "株式・投資信託", color: "text-teal-400",   bg: "bg-teal-900/20",   icon: <TrendingUp size={16} /> },
+  realestate:  { label: "不動産",         color: "text-amber-400",  bg: "bg-amber-900/20",  icon: <Home size={16} /> },
+  vehicle:     { label: "車・乗り物",     color: "text-purple-400", bg: "bg-purple-900/20", icon: <Car size={16} /> },
+  other:       { label: "その他資産",     color: "text-teal-400",   bg: "bg-teal-900/20",   icon: <Package size={16} /> },
+  liability:   { label: "負債・ローン",   color: "text-red-400",    bg: "bg-red-900/20",    icon: <Landmark size={16} />, isLiability: true },
 };
 
 // ─── ユーティリティ ──────────────────────────────────────────
@@ -178,8 +175,8 @@ function MiniBar({ data }: { data: HistoryPoint[] }) {
             <div
               className={`rounded-sm transition-all ${
                 isLatest
-                  ? isPositive ? "bg-brand-500" : "bg-red-500"
-                  : isPositive ? "bg-brand-300 dark:bg-brand-700" : "bg-red-300 dark:bg-red-700"
+                  ? isPositive ? "bg-teal-500" : "bg-red-500"
+                  : isPositive ? "bg-teal-700" : "bg-red-700"
               }`}
               style={{ height: `${h}px` }}
             />
@@ -201,20 +198,17 @@ export default function AssetsPage() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // フォーム状態
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [editAccount, setEditAccount] = useState<Account | null>(null);
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState<Category>("cash");
   const [newNote, setNewNote] = useState("");
 
-  // 残高入力
-  const [activeInput, setActiveInput] = useState<number | null>(null); // account id
+  const [activeInput, setActiveInput] = useState<number | null>(null);
   const [inputAmount, setInputAmount] = useState("");
   const [inputMemo, setInputMemo] = useState("");
   const [inputDate, setInputDate] = useState(today());
 
-  // カテゴリ折りたたみ
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -254,7 +248,6 @@ export default function AssetsPage() {
     if (user) load();
   }, [user, load]);
 
-  // ─── 口座作成 ──────────────────────────────────────────
   const handleCreateAccount = async () => {
     if (!newName.trim()) return;
     try {
@@ -270,7 +263,6 @@ export default function AssetsPage() {
     }
   };
 
-  // ─── 口座削除 ──────────────────────────────────────────
   const handleDeleteAccount = async (id: number) => {
     if (!confirm("この資産項目を削除しますか？記録も全て削除されます。")) return;
     try {
@@ -281,7 +273,6 @@ export default function AssetsPage() {
     }
   };
 
-  // ─── 残高記録 ──────────────────────────────────────────
   const handleUpsertSnapshot = async (accountId: number) => {
     const amount = parseFloat(inputAmount.replace(/,/g, ""));
     if (isNaN(amount)) return;
@@ -306,12 +297,11 @@ export default function AssetsPage() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  // カテゴリ別にグルーピング
   const byCategory = Object.keys(CATEGORY_CONFIG).reduce<Record<string, Account[]>>((acc, cat) => {
     acc[cat] = accounts.filter(a => a.category === cat && a.is_active);
     return acc;
@@ -323,62 +313,58 @@ export default function AssetsPage() {
   const netChange = lastMonth !== null ? netWorth - lastMonth : null;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
 
       {/* ─── ヘッダー ─── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-surface-900 dark:text-white flex items-center gap-2">
-            <Wallet className="text-brand-500" size={24} />
+          <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+            <Wallet className="text-teal-500" size={24} />
             資産管理
           </h1>
-          <p className="text-sm text-surface-500 mt-0.5">現金・不動産・車・株まで、全財産を一括管理</p>
+          <p className="text-sm text-slate-500 mt-0.5">現金・不動産・車・株まで、全財産を一括管理</p>
         </div>
         <button
           onClick={() => { setShowAddAccount(true); setEditAccount(null); }}
-          className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm"
+          className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 rounded text-xs font-black tracking-widest uppercase transition-colors"
         >
           <Plus size={15} /> 資産を追加
         </button>
       </div>
 
       {/* ─── 純資産サマリーカード ─── */}
-      <div className="card p-6 rounded-2xl bg-gradient-to-br from-surface-50 to-white dark:from-surface-800 dark:to-surface-900 border border-surface-200 dark:border-surface-700 shadow-sm">
+      <div className="rounded border border-slate-700/60 bg-[#0c1424] p-6">
         <div className="flex flex-col md:flex-row md:items-center gap-6">
-          {/* 純資産 */}
           <div className="flex-1">
-            <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-1">純資産（ネットワース）</p>
-            <div className={`text-4xl font-black ${netPositive ? "text-brand-600 dark:text-brand-400" : "text-red-500"}`}>
+            <p className="text-[10px] font-black tracking-widest uppercase text-slate-500 mb-1">純資産（ネットワース）</p>
+            <div className={`text-4xl font-black font-mono ${netPositive ? "text-teal-400" : "text-red-400"}`}>
               {fmtShort(netWorth)}
             </div>
             {netChange !== null && (
-              <div className={`flex items-center gap-1 mt-1 text-sm font-medium ${netChange >= 0 ? "text-brand-500" : "text-red-500"}`}>
+              <div className={`flex items-center gap-1 mt-1 text-sm font-semibold font-mono ${netChange >= 0 ? "text-teal-500" : "text-red-400"}`}>
                 {netChange >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                 前月比 {netChange >= 0 ? "+" : ""}{fmtShort(netChange)}
               </div>
             )}
           </div>
 
-          {/* 内訳 */}
           <div className="flex gap-6">
             <div className="text-center">
-              <p className="text-xs text-surface-400 mb-1">総資産</p>
-              <p className="text-xl font-bold text-surface-900 dark:text-white">{fmtShort(summary?.total_assets ?? 0)}</p>
+              <p className="text-[10px] font-black tracking-widest uppercase text-slate-500 mb-1">総資産</p>
+              <p className="text-xl font-black font-mono text-white">{fmtShort(summary?.total_assets ?? 0)}</p>
             </div>
             <div className="text-center">
-              <p className="text-xs text-surface-400 mb-1">総負債</p>
-              <p className="text-xl font-bold text-red-500">{fmtShort(summary?.total_liabilities ?? 0)}</p>
+              <p className="text-[10px] font-black tracking-widest uppercase text-slate-500 mb-1">総負債</p>
+              <p className="text-xl font-black font-mono text-red-400">{fmtShort(summary?.total_liabilities ?? 0)}</p>
             </div>
           </div>
 
-          {/* ミニチャート */}
           <div className="w-32">
-            <p className="text-xs text-surface-400 mb-1">推移（12ヶ月）</p>
+            <p className="text-[10px] font-black tracking-widest uppercase text-slate-500 mb-1">推移（12ヶ月）</p>
             <MiniBar data={history} />
           </div>
         </div>
 
-        {/* カテゴリ別内訳バー */}
         {summary && summary.total_assets > 0 && (
           <div className="mt-4">
             <div className="flex h-2 rounded-full overflow-hidden gap-0.5">
@@ -387,8 +373,8 @@ export default function AssetsPage() {
                 const pct = (v / summary.total_assets) * 100;
                 if (pct < 1) return null;
                 const colorMap: Record<string, string> = {
-                  cash: "bg-blue-400", stock: "bg-brand-500", realestate: "bg-amber-400",
-                  vehicle: "bg-purple-400", other: "bg-teal-400",
+                  cash: "bg-blue-500", stock: "bg-teal-500", realestate: "bg-amber-500",
+                  vehicle: "bg-purple-500", other: "bg-teal-400",
                 };
                 return (
                   <div
@@ -416,15 +402,15 @@ export default function AssetsPage() {
         )}
       </div>
 
-      {/* ─── 株式シグナル × 資産インパクトシミュレーター ─── */}
-      <div className="border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/20 rounded-2xl overflow-hidden">
-        <div className="px-4 pt-4 pb-3 flex items-center gap-2 border-b border-brand-100 dark:border-brand-900">
-          <div className="w-7 h-7 rounded-lg bg-brand-500 flex items-center justify-center shrink-0">
+      {/* ─── AIシグナル × 資産シミュレーター ─── */}
+      <div className="rounded border border-teal-700/40 bg-teal-900/10 overflow-hidden">
+        <div className="px-4 pt-4 pb-3 flex items-center gap-2 border-b border-teal-700/30">
+          <div className="w-7 h-7 rounded bg-teal-600 flex items-center justify-center shrink-0">
             <Zap size={14} className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold text-brand-700 dark:text-brand-300">AIシグナル × 純資産シミュレーター</p>
-            <p className="text-xs text-brand-500 dark:text-brand-400">ウォッチリストの買いシグナル銘柄に投資したら純資産はどう変わる？</p>
+            <p className="text-sm font-black text-teal-300 tracking-wide">AIシグナル × 純資産シミュレーター</p>
+            <p className="text-xs text-teal-500">ウォッチリストの買いシグナル銘柄に投資したら純資産はどう変わる？</p>
           </div>
         </div>
         <div className="p-4">
@@ -439,34 +425,32 @@ export default function AssetsPage() {
         const isOpen = !collapsed[cat];
 
         return (
-          <div key={cat} className="border border-surface-200 dark:border-surface-700 rounded-2xl overflow-hidden">
-            {/* カテゴリヘッダー */}
+          <div key={cat} className="rounded border border-slate-700/60 overflow-hidden">
             <button
               onClick={() => setCollapsed(p => ({ ...p, [cat]: !p[cat] }))}
-              className="w-full flex items-center justify-between px-4 py-3 bg-surface-50 dark:bg-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 bg-[#060b16] hover:bg-slate-800/60 transition-colors"
             >
               <div className="flex items-center gap-2">
                 <span className={`${cfg.color}`}>{cfg.icon}</span>
-                <span className="font-semibold text-sm text-surface-800 dark:text-surface-200">{cfg.label}</span>
-                <span className="text-xs text-surface-400 bg-surface-200 dark:bg-surface-700 rounded-full px-2 py-0.5">{items.length}</span>
+                <span className="font-semibold text-sm text-slate-200">{cfg.label}</span>
+                <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded px-2 py-0.5 font-black tracking-widest uppercase">{items.length}</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-sm font-bold ${cfg.isLiability ? "text-red-500" : "text-surface-700 dark:text-surface-300"}`}>
+                <span className={`text-sm font-black font-mono ${cfg.isLiability ? "text-red-400" : "text-slate-200"}`}>
                   {cfg.isLiability ? "−" : ""}{fmtShort(total)}
                 </span>
-                {isOpen ? <ChevronUp size={14} className="text-surface-400" /> : <ChevronDown size={14} className="text-surface-400" />}
+                {isOpen ? <ChevronUp size={14} className="text-slate-500" /> : <ChevronDown size={14} className="text-slate-500" />}
               </div>
             </button>
 
-            {/* 口座リスト */}
             {isOpen && (
-              <div className="divide-y divide-surface-100 dark:divide-surface-800">
+              <div className="divide-y divide-slate-700/40 bg-[#0c1424]">
                 {items.length === 0 ? (
                   <div className="px-4 py-6 text-center">
-                    <p className="text-sm text-surface-400">まだ登録されていません</p>
+                    <p className="text-sm text-slate-500">まだ登録されていません</p>
                     <button
                       onClick={() => { setNewCategory(cat); setShowAddAccount(true); }}
-                      className="mt-2 text-xs text-brand-500 hover:text-brand-600 font-medium"
+                      className="mt-2 text-xs text-teal-500 hover:text-teal-400 font-black tracking-wide transition-colors"
                     >
                       + {cfg.label}を追加
                     </button>
@@ -476,20 +460,20 @@ export default function AssetsPage() {
                     <div key={acct.id} className="px-4 py-3">
                       <div className="flex items-center justify-between">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-surface-800 dark:text-surface-200 truncate">{acct.name}</p>
-                          {acct.note && <p className="text-xs text-surface-400 truncate">{acct.note}</p>}
+                          <p className="text-sm font-medium text-slate-200 truncate">{acct.name}</p>
+                          {acct.note && <p className="text-xs text-slate-500 truncate">{acct.note}</p>}
                           {acct.latest_date && (
-                            <p className="text-xs text-surface-400">{acct.latest_date} 時点</p>
+                            <p className="text-xs text-slate-600 font-mono">{acct.latest_date} 時点</p>
                           )}
                         </div>
 
                         <div className="flex items-center gap-3 shrink-0 ml-3">
                           {acct.latest_amount !== null ? (
-                            <span className={`text-base font-bold ${cfg.isLiability ? "text-red-500" : "text-surface-900 dark:text-white"}`}>
+                            <span className={`text-base font-black font-mono ${cfg.isLiability ? "text-red-400" : "text-white"}`}>
                               {fmtShort(acct.latest_amount)}
                             </span>
                           ) : (
-                            <span className="text-sm text-surface-400">未記録</span>
+                            <span className="text-sm text-slate-600">未記録</span>
                           )}
 
                           <button
@@ -499,14 +483,14 @@ export default function AssetsPage() {
                               setInputDate(today());
                               setInputMemo("");
                             }}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-surface-400 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors"
+                            className="w-7 h-7 rounded flex items-center justify-center text-slate-500 hover:text-teal-400 hover:bg-teal-900/30 transition-colors"
                             title="残高を更新"
                           >
                             <Pencil size={13} />
                           </button>
                           <button
                             onClick={() => handleDeleteAccount(acct.id)}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-surface-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            className="w-7 h-7 rounded flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
                             title="削除"
                           >
                             <Trash2 size={13} />
@@ -514,22 +498,21 @@ export default function AssetsPage() {
                         </div>
                       </div>
 
-                      {/* インライン残高入力 */}
                       {activeInput === acct.id && (
-                        <div className="mt-2 p-3 bg-surface-50 dark:bg-surface-800 rounded-xl space-y-2">
+                        <div className="mt-2 p-3 bg-[#060b16] rounded space-y-2">
                           <div className="flex gap-2">
                             <input
                               type="number"
                               value={inputAmount}
                               onChange={e => setInputAmount(e.target.value)}
                               placeholder="残高（円）"
-                              className="flex-1 bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+                              className="flex-1 bg-[#0c1424] border border-slate-700/60 rounded px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500/50 font-mono"
                             />
                             <input
                               type="date"
                               value={inputDate}
                               onChange={e => setInputDate(e.target.value)}
-                              className="bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+                              className="bg-[#0c1424] border border-slate-700/60 rounded px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500/50"
                             />
                           </div>
                           <input
@@ -537,18 +520,18 @@ export default function AssetsPage() {
                             value={inputMemo}
                             onChange={e => setInputMemo(e.target.value)}
                             placeholder="メモ（任意）"
-                            className="w-full bg-white dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-400"
+                            className="w-full bg-[#0c1424] border border-slate-700/60 rounded px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500/50"
                           />
                           <div className="flex gap-2 justify-end">
                             <button
                               onClick={() => setActiveInput(null)}
-                              className="px-3 py-1.5 text-xs text-surface-500 hover:text-surface-700 rounded-lg transition-colors"
+                              className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-300 rounded transition-colors"
                             >
                               キャンセル
                             </button>
                             <button
                               onClick={() => handleUpsertSnapshot(acct.id)}
-                              className="px-3 py-1.5 text-xs bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-bold transition-colors"
+                              className="px-3 py-1.5 text-xs bg-teal-600 hover:bg-teal-500 text-white rounded font-black tracking-widest uppercase transition-colors"
                             >
                               保存
                             </button>
@@ -559,12 +542,11 @@ export default function AssetsPage() {
                   ))
                 )}
 
-                {/* カテゴリ内追加ボタン */}
                 {items.length > 0 && (
                   <div className="px-4 py-2">
                     <button
                       onClick={() => { setNewCategory(cat); setShowAddAccount(true); }}
-                      className="text-xs text-surface-400 hover:text-brand-500 transition-colors flex items-center gap-1"
+                      className="text-xs text-slate-500 hover:text-teal-400 transition-colors flex items-center gap-1"
                     >
                       <Plus size={12} /> {cfg.label}を追加
                     </button>
@@ -578,33 +560,33 @@ export default function AssetsPage() {
 
       {/* ─── 口座追加モーダル ─── */}
       {showAddAccount && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddAccount(false)}>
-          <div className="bg-white dark:bg-surface-900 rounded-2xl p-6 w-full max-w-sm shadow-xl" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-surface-900 dark:text-white mb-4">資産を追加</h2>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowAddAccount(false)}>
+          <div className="bg-[#0c1424] border border-slate-700/60 rounded p-6 w-full max-w-sm shadow-xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-black tracking-tight text-white mb-4">資産を追加</h2>
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-surface-500 block mb-1">名前</label>
+                <label className="text-[10px] font-black tracking-widest uppercase text-slate-500 block mb-1">名前</label>
                 <input
                   autoFocus
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   placeholder="例: 三菱UFJ普通預金、自宅、マイカー..."
-                  className="w-full border border-surface-200 dark:border-surface-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-surface-800 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                  className="w-full border border-slate-700/60 rounded px-3 py-2 text-sm bg-[#060b16] text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500/50"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-surface-500 block mb-1">カテゴリ</label>
+                <label className="text-[10px] font-black tracking-widest uppercase text-slate-500 block mb-1">カテゴリ</label>
                 <div className="grid grid-cols-3 gap-2">
                   {(Object.entries(CATEGORY_CONFIG) as [Category, typeof CATEGORY_CONFIG[Category]][]).map(([cat, cfg]) => (
                     <button
                       key={cat}
                       onClick={() => setNewCategory(cat)}
-                      className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl border text-xs font-medium transition-all ${
+                      className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded border text-xs font-semibold transition-all ${
                         newCategory === cat
-                          ? `border-brand-400 ${cfg.bg} ${cfg.color}`
-                          : "border-surface-200 dark:border-surface-700 text-surface-500 hover:border-brand-300"
+                          ? `border-teal-500/60 ${cfg.bg} ${cfg.color}`
+                          : "border-slate-700/60 text-slate-500 hover:border-teal-500/40"
                       }`}
                     >
                       {cfg.icon}
@@ -615,12 +597,12 @@ export default function AssetsPage() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-surface-500 block mb-1">メモ（任意）</label>
+                <label className="text-[10px] font-black tracking-widest uppercase text-slate-500 block mb-1">メモ（任意）</label>
                 <input
                   value={newNote}
                   onChange={e => setNewNote(e.target.value)}
                   placeholder="例: 住宅ローン残高、駐車場代など"
-                  className="w-full border border-surface-200 dark:border-surface-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-surface-800 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                  className="w-full border border-slate-700/60 rounded px-3 py-2 text-sm bg-[#060b16] text-slate-200 focus:outline-none focus:ring-1 focus:ring-teal-500/50"
                 />
               </div>
             </div>
@@ -628,14 +610,14 @@ export default function AssetsPage() {
             <div className="flex gap-2 mt-5">
               <button
                 onClick={() => setShowAddAccount(false)}
-                className="flex-1 py-2.5 rounded-xl border border-surface-200 dark:border-surface-600 text-sm text-surface-600 dark:text-surface-400 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
+                className="flex-1 py-2.5 rounded border border-slate-700/60 text-sm text-slate-400 hover:bg-slate-800/60 transition-colors"
               >
                 キャンセル
               </button>
               <button
                 onClick={handleCreateAccount}
                 disabled={!newName.trim()}
-                className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white text-sm font-bold transition-colors"
+                className="flex-1 py-2.5 rounded bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white text-xs font-black tracking-widest uppercase transition-colors"
               >
                 追加
               </button>
@@ -647,16 +629,16 @@ export default function AssetsPage() {
       {/* ─── 空状態 ─── */}
       {accounts.length === 0 && !loading && (
         <div className="text-center py-16 space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center mx-auto">
-            <Wallet size={28} className="text-surface-400" />
+          <div className="w-16 h-16 rounded bg-slate-800/60 flex items-center justify-center mx-auto">
+            <Wallet size={28} className="text-slate-500" />
           </div>
           <div>
-            <p className="font-semibold text-surface-700 dark:text-surface-300">まだ資産が登録されていません</p>
-            <p className="text-sm text-surface-400 mt-1">現金・株・不動産・車・ローンを登録して純資産を把握しましょう</p>
+            <p className="font-black text-slate-300">まだ資産が登録されていません</p>
+            <p className="text-sm text-slate-500 mt-1">現金・株・不動産・車・ローンを登録して純資産を把握しましょう</p>
           </div>
           <button
             onClick={() => setShowAddAccount(true)}
-            className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
+            className="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-500 text-white px-6 py-2.5 rounded text-xs font-black tracking-widest uppercase transition-colors"
           >
             <Plus size={15} /> 最初の資産を追加
           </button>

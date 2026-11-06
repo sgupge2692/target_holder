@@ -16,13 +16,13 @@ import { ArrowLeft, Lock, Star, TrendingUp, TrendingDown, Crown } from "lucide-r
 /** 確率バー（ミニ版） */
 function MiniProbBar({ prob }: { prob: number }) {
   const pct = Math.round(prob * 100);
-  const color = prob >= 0.8 ? "bg-brand-500" : prob >= 0.7 ? "bg-emerald-400" : prob >= 0.6 ? "bg-amber-400" : "bg-gray-400";
+  const color = prob >= 0.8 ? "bg-teal-500" : prob >= 0.7 ? "bg-teal-400" : prob >= 0.6 ? "bg-amber-400" : "bg-slate-500";
   return (
     <div className="flex items-center gap-1.5 justify-end">
       <div className="prob-bar-track w-12">
         <div className={`prob-bar-fill ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className={`font-mono text-xs font-semibold w-[3rem] text-right ${prob >= 0.75 ? "text-brand-600 dark:text-brand-400" : "text-gray-600 dark:text-slate-400"}`}>
+      <span className={`font-mono text-xs font-semibold w-[3rem] text-right ${prob >= 0.75 ? "text-teal-400" : "text-slate-400"}`}>
         {pct.toFixed(1)}%
       </span>
     </div>
@@ -105,24 +105,24 @@ export default function StockPage() {
     <div className="space-y-5">
       {/* ヘッダー */}
       <div className="flex items-start gap-3">
-        <Link href="/" className="mt-1 p-1.5 rounded-md hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors shrink-0">
+        <Link href="/" className="mt-1 p-1.5 rounded hover:bg-slate-800/60 transition-colors shrink-0">
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 flex-wrap">
             <div>
-              <h1 className="text-xl font-bold leading-tight">{stock?.company_name ?? code}</h1>
-              <p className="text-sm text-surface-400 mt-0.5">{code} · {stock?.market_code}</p>
+              <h1 className="text-xl font-black tracking-tight leading-tight">{stock?.company_name ?? code}</h1>
+              <p className="text-sm text-slate-500 mt-0.5 font-mono">{code} · {stock?.market_code}</p>
             </div>
 
             {/* 株価表示 */}
             {latestPrice && (
               <div className="text-right shrink-0">
-                <div className="text-xl font-black font-mono tabular-nums">
+                <div className="text-xl font-black font-mono tabular-nums text-white">
                   ¥{latestPrice.toLocaleString()}
                 </div>
                 {changePct != null && (
-                  <div className={`flex items-center justify-end gap-0.5 text-xs font-semibold ${isUp ? "text-emerald-600" : "text-red-500"}`}>
+                  <div className={`flex items-center justify-end gap-0.5 text-xs font-semibold ${isUp ? "text-teal-400" : "text-red-400"}`}>
                     {isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                     {isUp ? "+" : ""}{changePct.toFixed(2)}%
                   </div>
@@ -137,18 +137,18 @@ export default function StockPage() {
               <button
                 onClick={toggleWatch}
                 disabled={watchLoading}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all disabled:opacity-50 ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-black tracking-wide border transition-all disabled:opacity-50 ${
                   watched
-                    ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 border-amber-300 dark:border-amber-700 hover:bg-amber-200"
-                    : "bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:bg-gray-200 dark:hover:bg-slate-700"
+                    ? "bg-amber-900/30 text-amber-300 border-amber-700/40 hover:bg-amber-900/50"
+                    : "bg-slate-800/60 text-slate-400 border-slate-700/60 hover:bg-slate-800"
                 }`}
               >
-                <Star size={12} className={watched ? "fill-amber-500 text-amber-500" : ""} />
+                <Star size={12} className={watched ? "fill-amber-400 text-amber-400" : ""} />
                 {watched ? "ウォッチ中" : "ウォッチ"}
               </button>
             )}
             {user && quotes?.plan === "free" && (
-              <Link href="/billing" className="flex items-center gap-1 text-xs bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 px-3 py-1.5 rounded-full hover:from-amber-200 transition-colors">
+              <Link href="/billing" className="flex items-center gap-1 text-xs bg-teal-900/20 text-teal-400 border border-teal-700/40 px-3 py-1.5 rounded hover:bg-teal-900/40 transition-colors font-black tracking-wide">
                 <Crown size={11} />
                 Pro で全期間表示
               </Link>
@@ -158,10 +158,10 @@ export default function StockPage() {
       </div>
 
       {/* チャート */}
-      <div className="bg-white dark:bg-surface-900 rounded-2xl border border-surface-100 dark:border-surface-800 p-5">
-        <p className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">株価チャート</p>
+      <div className="bg-[#0c1424] rounded border border-slate-700/60 p-5">
+        <p className="text-[10px] font-black tracking-widest uppercase text-slate-400 mb-4">株価チャート</p>
         {!user ? (
-          <div className="flex items-center justify-center h-40 gap-2 text-surface-400">
+          <div className="flex items-center justify-center h-40 gap-2 text-slate-500">
             <Lock size={16} /><span className="text-sm">ログインで閲覧可能</span>
           </div>
         ) : sortedQuotes.length > 0 ? (
@@ -171,7 +171,7 @@ export default function StockPage() {
             isPro={user.plan === "pro"}
           />
         ) : (
-          <p className="text-center text-surface-400 py-12 text-sm">データなし</p>
+          <p className="text-center text-slate-500 py-12 text-sm">データなし</p>
         )}
       </div>
 
@@ -188,23 +188,23 @@ export default function StockPage() {
       )}
 
       {/* シグナル履歴 */}
-      <div className="bg-white dark:bg-surface-900 rounded-2xl border border-surface-100 dark:border-surface-800 p-5">
+      <div className="bg-[#0c1424] rounded border border-slate-700/60 p-5">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold text-surface-700 dark:text-surface-300">シグナル履歴</p>
+          <p className="text-[10px] font-black tracking-widest uppercase text-slate-400">シグナル履歴</p>
           {history?.plan === "free" && (
-            <span className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+            <span className="text-[10px] font-black tracking-widest uppercase text-amber-500 bg-amber-900/20 px-2 py-0.5 rounded border border-amber-700/40">
               直近5件
             </span>
           )}
         </div>
         {!user ? (
-          <div className="flex items-center justify-center h-24 gap-2 text-surface-400">
+          <div className="flex items-center justify-center h-24 gap-2 text-slate-500">
             <Lock size={16} /><span className="text-sm">ログインで閲覧可能</span>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-xs text-surface-400 dark:text-surface-500 uppercase tracking-wide border-b border-surface-100 dark:border-surface-800">
+              <thead className="text-[10px] text-slate-500 uppercase tracking-widest font-black border-b border-slate-700/40">
                 <tr>
                   <th className="pb-2.5 text-left">日付</th>
                   <th className="pb-2.5 text-center">シグナル</th>
@@ -213,24 +213,24 @@ export default function StockPage() {
                   <th className="pb-2.5 text-center">的中</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-surface-50 dark:divide-surface-800">
+              <tbody className="divide-y divide-slate-700/30">
                 {(history?.history ?? []).map((h, i) => (
-                  <tr key={i} className="hover:bg-surface-50 dark:hover:bg-surface-800/30 transition-colors">
-                    <td className="py-2.5 text-surface-400 dark:text-surface-500 tabular-nums text-xs">{h.Date}</td>
+                  <tr key={i} className="hover:bg-slate-800/30 transition-colors">
+                    <td className="py-2.5 text-slate-500 tabular-nums text-xs font-mono">{h.Date}</td>
                     <td className="py-2.5 text-center"><SignalBadge signal={h.signal} /></td>
                     <td className="py-2.5">
                       <MiniProbBar prob={h.up_probability} />
                     </td>
                     <td className="py-2.5 text-right font-mono text-xs">
                       {h.actual_return != null
-                        ? <span className={`font-semibold ${h.actual_return >= 0 ? "text-brand-600 dark:text-brand-400" : "text-danger-500"}`}>
+                        ? <span className={`font-semibold ${h.actual_return >= 0 ? "text-teal-400" : "text-red-400"}`}>
                             {h.actual_return >= 0 ? "+" : ""}{(h.actual_return * 100).toFixed(2)}%
                           </span>
-                        : <span className="text-surface-200 dark:text-surface-700">—</span>}
+                        : <span className="text-slate-700">—</span>}
                     </td>
                     <td className="py-2.5 text-center text-base">
                       {h.is_correct == null
-                        ? <span className="text-surface-200 dark:text-surface-700 text-xs">—</span>
+                        ? <span className="text-slate-700 text-xs">—</span>
                         : h.is_correct ? "✅" : "❌"}
                     </td>
                   </tr>
@@ -238,7 +238,7 @@ export default function StockPage() {
               </tbody>
             </table>
             {(history?.history ?? []).length === 0 && (
-              <p className="text-center text-surface-400 py-8 text-sm">履歴なし</p>
+              <p className="text-center text-slate-500 py-8 text-sm">履歴なし</p>
             )}
           </div>
         )}
