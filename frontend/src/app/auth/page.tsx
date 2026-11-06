@@ -38,13 +38,13 @@ export default function AuthPage() {
 
         {/* ロゴ・タイトル */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-600 mb-4 shadow-lg shadow-brand-500/30">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded bg-teal-600 mb-4 shadow-lg">
             <TrendingUp size={28} className="text-white" />
           </div>
           <h1 className="text-2xl font-black tracking-tight">
             {mode === "login" ? "おかえりなさい" : "アカウント作成"}
           </h1>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-slate-400 mt-1">
             {mode === "login"
               ? "AIシグナルにログイン"
               : "無料で始める · クレカ不要"}
@@ -54,42 +54,42 @@ export default function AuthPage() {
         {/* フォームカード */}
         <form
           onSubmit={submit}
-          className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 p-7 shadow-xl shadow-gray-200/50 dark:shadow-none space-y-4"
+          className="bg-[#0c1424] rounded border border-slate-700/60 p-7 shadow-xl space-y-4"
         >
 
           {/* メール */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
+            <label className="block text-[10px] font-black tracking-widest uppercase text-slate-500 mb-1.5">
               メールアドレス
             </label>
             <div className="relative">
-              <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
               <input
                 type="email" required value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full border border-gray-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-sm bg-gray-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white dark:focus:bg-slate-700 transition-all"
+                className="w-full border border-slate-700/60 rounded pl-9 pr-3 py-2.5 text-sm bg-[#060b16] text-slate-200 outline-none focus:ring-1 focus:ring-teal-500/50 placeholder-slate-600 transition-all"
               />
             </div>
           </div>
 
           {/* パスワード */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
+            <label className="block text-[10px] font-black tracking-widest uppercase text-slate-500 mb-1.5">
               パスワード
             </label>
             <div className="relative">
-              <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
               <input
                 type={showPass ? "text" : "password"} required value={password}
                 onChange={e => setPass(e.target.value)}
                 minLength={8}
                 placeholder={mode === "register" ? "8文字以上" : "パスワード"}
-                className="w-full border border-gray-200 dark:border-slate-700 rounded-xl pl-9 pr-10 py-2.5 text-sm bg-gray-50 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white dark:focus:bg-slate-700 transition-all"
+                className="w-full border border-slate-700/60 rounded pl-9 pr-10 py-2.5 text-sm bg-[#060b16] text-slate-200 outline-none focus:ring-1 focus:ring-teal-500/50 placeholder-slate-600 transition-all"
               />
               <button
                 type="button"
                 onClick={() => setShowP(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
               >
                 {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
@@ -98,7 +98,7 @@ export default function AuthPage() {
 
           {/* エラー */}
           {error && (
-            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 rounded-xl px-3.5 py-2.5 border border-red-100 dark:border-red-900/40">
+            <div className="flex items-center gap-2 text-sm text-red-400 bg-red-900/20 rounded px-3.5 py-2.5 border border-red-900/40">
               <span className="shrink-0">⚠</span>
               {error}
             </div>
@@ -107,7 +107,7 @@ export default function AuthPage() {
           {/* 送信ボタン */}
           <button
             type="submit" disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-60 text-white py-3 rounded-xl font-bold transition-all shadow-md shadow-brand-500/20 hover:shadow-brand-500/30 mt-1"
+            className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-60 text-white py-3 rounded font-black text-xs tracking-widest uppercase transition-all mt-1"
           >
             {loading ? (
               <span className="flex items-center gap-2">
@@ -126,12 +126,12 @@ export default function AuthPage() {
           </button>
 
           {/* モード切り替え */}
-          <p className="text-center text-sm text-gray-500 dark:text-slate-400 pt-1">
+          <p className="text-center text-sm text-slate-400 pt-1">
             {mode === "login" ? "アカウントがない？" : "既にお持ちですか？"}{" "}
             <button
               type="button"
               onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}
-              className="text-brand-600 dark:text-brand-400 hover:underline font-semibold"
+              className="text-teal-500 hover:text-teal-400 hover:underline font-semibold transition-colors"
             >
               {mode === "login" ? "新規登録" : "ログイン"}
             </button>
@@ -139,8 +139,8 @@ export default function AuthPage() {
 
           {/* パスワードリセット */}
           {mode === "login" && (
-            <p className="text-center text-xs text-gray-400 dark:text-slate-500">
-              <Link href="/auth/reset-password" className="hover:text-brand-600 hover:underline">
+            <p className="text-center text-xs text-slate-600">
+              <Link href="/auth/reset-password" className="hover:text-teal-500 hover:underline transition-colors">
                 パスワードをお忘れですか？
               </Link>
             </p>
@@ -148,7 +148,7 @@ export default function AuthPage() {
         </form>
 
         {/* セキュリティ注記 */}
-        <p className="text-center text-xs text-gray-400 dark:text-slate-600 mt-5 flex items-center justify-center gap-1">
+        <p className="text-center text-xs text-slate-700 mt-5 flex items-center justify-center gap-1">
           <Shield size={11} />
           パスワードは暗号化して保存されます
         </p>

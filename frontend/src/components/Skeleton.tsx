@@ -24,7 +24,7 @@ export function SignalRowSkeleton() {
 /** シグナルカード用スケルトン（モバイル） */
 export function SignalCardSkeleton() {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 space-y-3">
+    <div className="rounded border border-slate-700/60 bg-[#0c1424] p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <Skeleton className="h-4 w-28 mb-1.5" />
@@ -43,7 +43,7 @@ export function SignalCardSkeleton() {
 /** KPIカード用スケルトン */
 export function StatCardSkeleton() {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+    <div className="rounded border border-slate-700/60 bg-[#0c1424] p-4">
       <Skeleton className="h-3 w-20 mb-3" />
       <Skeleton className="h-8 w-24 mb-1.5" />
       <Skeleton className="h-3 w-32" />

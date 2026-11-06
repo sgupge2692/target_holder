@@ -59,11 +59,11 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
     <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
       <input
         type="checkbox"
-        className="w-3.5 h-3.5 accent-brand-500 cursor-pointer"
+        className="w-3.5 h-3.5 accent-teal-500 cursor-pointer"
         checked={checked}
         onChange={onChange}
       />
-      <span className="text-surface-500 dark:text-surface-400">{label}</span>
+      <span className="text-slate-500">{label}</span>
     </label>
   );
 }
@@ -110,8 +110,8 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
     time:  q.Date as Time,
     value: Number(q.Volume),
     color: Number(q.AdjustmentClose) >= Number(q.Open)
-      ? isDark ? "rgba(74,222,128,0.35)" : "rgba(22,163,74,0.3)"
-      : isDark ? "rgba(251,113,133,0.35)" : "rgba(225,29,72,0.28)",
+      ? "rgba(45,212,191,0.35)"
+      : "rgba(251,113,133,0.35)",
   }));
 
   const closeLine = filteredQuotes.map(q => ({
@@ -122,18 +122,17 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
   // チャート生成
   const buildChart = useCallback(() => {
     if (!containerRef.current) return;
-    // StrictMode の二重実行で dispose 済みオブジェクトにアクセスしないよう try/catch
     if (chartRef.current) {
       try { chartRef.current.remove(); } catch {}
       chartRef.current = null;
     }
 
-    const bg    = isDark ? "#0f1a2e" : "#ffffff";
-    const text  = isDark ? "#94a3b8" : "#64748b";
-    const grid  = isDark ? "rgba(30,45,69,0.8)" : "rgba(226,232,240,0.6)";
-    const up    = isDark ? "#4ade80" : "#16a34a";
-    const down  = isDark ? "#fb7185" : "#e11d48";
-    const border = isDark ? "#1e2d45" : "#e2e8f0";
+    const bg    = "#0c1424";
+    const text  = "#64748b";
+    const grid  = "rgba(30,45,69,0.8)";
+    const up    = "#2dd4bf";   // teal-400
+    const down  = "#fb7185";   // rose-400
+    const border = "#1e2d45";
 
     const chart = createChart(containerRef.current, {
       width:  containerRef.current.clientWidth,
@@ -141,7 +140,7 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
       layout: {
         background: { type: ColorType.Solid, color: bg },
         textColor: text,
-        fontFamily: "'Inter var', Inter, ui-sans-serif, sans-serif",
+        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace",
         fontSize: 11,
       },
       grid: {
@@ -150,8 +149,8 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: isDark ? "#4ade80" : "#16a34a", labelBackgroundColor: isDark ? "#4ade80" : "#16a34a" },
-        horzLine: { color: isDark ? "#4ade80" : "#16a34a", labelBackgroundColor: isDark ? "#4ade80" : "#16a34a" },
+        vertLine: { color: up, labelBackgroundColor: up },
+        horzLine: { color: up, labelBackgroundColor: up },
       },
       rightPriceScale: {
         borderColor: border,
@@ -193,7 +192,7 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
     // EMA25
     if (showEma25 && closeLine.length >= 25) {
       const ema = chart.addSeries(LineSeries, {
-        color:       isDark ? "#fbbf24" : "#d97706",
+        color:       "#fbbf24",   // amber-400
         lineWidth:   1,
         crosshairMarkerVisible: false,
         priceLineVisible: false,
@@ -205,7 +204,7 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
     // EMA75
     if (showEma75 && closeLine.length >= 75) {
       const ema = chart.addSeries(LineSeries, {
-        color:       isDark ? "#c084fc" : "#9333ea",
+        color:       "#c084fc",   // purple-400
         lineWidth:   1,
         crosshairMarkerVisible: false,
         priceLineVisible: false,
@@ -214,7 +213,7 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
       ema75Ref.current = ema;
     }
 
-    // シグナルマーカー (v5: createSeriesMarkers)
+    // シグナルマーカー
     if (showSignal && signals.length > 0) {
       const visibleDates = new Set(filteredQuotes.map(q => q.Date));
       const markers: SeriesMarker<Time>[] = signals
@@ -230,7 +229,6 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
       createSeriesMarkers(candle, markers);
     }
 
-    // dispose 済みアクセス防止フラグ
     let disposed = false;
 
     // カスタムツールチップ
@@ -252,14 +250,14 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
         const isGreen = close >= open;
         tooltip.innerHTML = `
           <div class="text-xs font-mono leading-relaxed">
-            <div class="font-bold mb-1 ${isGreen ? "text-brand-500 dark:text-brand-400" : "text-danger-500 dark:text-danger-400"}">
+            <div class="font-bold mb-1 ${isGreen ? "text-teal-400" : "text-red-400"}">
               ${String(param.time)}
             </div>
-            <div class="grid grid-cols-2 gap-x-3 text-surface-700 dark:text-surface-300">
-              <span class="text-surface-400 dark:text-surface-500">始値</span><span>¥${open.toLocaleString()}</span>
-              <span class="text-surface-400 dark:text-surface-500">高値</span><span class="${isGreen ? "text-brand-600 dark:text-brand-400" : ""}">¥${high.toLocaleString()}</span>
-              <span class="text-surface-400 dark:text-surface-500">安値</span><span class="${!isGreen ? "text-danger-500 dark:text-danger-400" : ""}">¥${low.toLocaleString()}</span>
-              <span class="text-surface-400 dark:text-surface-500">終値</span><span class="font-bold">¥${close.toLocaleString()}</span>
+            <div class="grid grid-cols-2 gap-x-3 text-slate-300">
+              <span class="text-slate-500">始値</span><span>¥${open.toLocaleString()}</span>
+              <span class="text-slate-500">高値</span><span class="${isGreen ? "text-teal-400" : ""}">¥${high.toLocaleString()}</span>
+              <span class="text-slate-500">安値</span><span class="${!isGreen ? "text-red-400" : ""}">¥${low.toLocaleString()}</span>
+              <span class="text-slate-500">終値</span><span class="font-bold">¥${close.toLocaleString()}</span>
             </div>
           </div>
         `;
@@ -309,15 +307,15 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
       {/* コントロールバー */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         {/* 期間ボタン */}
-        <div className="flex items-center gap-1 bg-surface-50 dark:bg-surface-800 rounded-xl p-1 border border-surface-100 dark:border-surface-700">
+        <div className="flex items-center gap-1 bg-[#060b16] rounded p-1 border border-slate-700/60">
           {periods.map(p => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-3 py-1 rounded text-xs font-black tracking-widest uppercase transition-all ${
                 period === p
-                  ? "bg-white dark:bg-surface-700 text-brand-600 dark:text-brand-400 shadow-sm"
-                  : "text-surface-400 dark:text-surface-500 hover:text-surface-700 dark:hover:text-surface-300"
+                  ? "bg-[#0c1424] text-teal-400 shadow-sm border border-slate-700/60"
+                  : "text-slate-600 hover:text-slate-400"
               }`}
             >
               {p}
@@ -337,17 +335,17 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
       </div>
 
       {/* チャート本体 */}
-      <div className="relative overflow-hidden rounded-xl bg-white dark:bg-surface-900 border border-surface-100 dark:border-surface-800">
+      <div className="relative overflow-hidden rounded bg-[#0c1424] border border-slate-700/60">
         <div ref={containerRef} className="w-full" />
         {/* カスタムツールチップ */}
         <div
           ref={tooltipRef}
-          className="pointer-events-none absolute hidden z-10 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl px-3 py-2.5 shadow-xl"
+          className="pointer-events-none absolute hidden z-10 bg-[#060b16] border border-slate-700/60 rounded px-3 py-2.5 shadow-xl"
         />
       </div>
 
       {/* 凡例 */}
-      <div className="flex items-center gap-4 text-xs text-surface-400 dark:text-surface-500 flex-wrap">
+      <div className="flex items-center gap-4 text-xs text-slate-600 flex-wrap">
         {showEma25 && (
           <span className="flex items-center gap-1">
             <span className="inline-block w-4 h-0.5 bg-amber-500 rounded" />EMA25
@@ -360,12 +358,12 @@ export function StockChart({ quotes, signals = [], isPro }: Props) {
         )}
         {showSignal && signals.length > 0 && (
           <span className="flex items-center gap-1">
-            <span className="text-brand-500">▲</span>UPシグナル
-            <span className="text-danger-500 ml-2">▼</span>DOWNシグナル
+            <span className="text-teal-500">▲</span>UPシグナル
+            <span className="text-red-400 ml-2">▼</span>DOWNシグナル
           </span>
         )}
         {!isPro && (
-          <span className="ml-auto text-amber-500 dark:text-amber-400 font-medium">
+          <span className="ml-auto text-amber-500 font-medium">
             ※ Freeプランは直近30日
           </span>
         )}

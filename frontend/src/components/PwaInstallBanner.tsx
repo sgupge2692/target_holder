@@ -15,28 +15,23 @@ export function PwaInstallBanner() {
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
-    // すでにインストール済み / 非表示設定ならスキップ
     try {
       if (localStorage.getItem("pwa-dismissed")) { setDismissed(true); return; }
     } catch {}
 
-    // インストール済みかどうか (standalone モード)
     if (window.matchMedia("(display-mode: standalone)").matches) {
       setInstalled(true);
       return;
     }
 
-    // iOS Safari 判定
     const ua = navigator.userAgent;
     const isIosDev = /iphone|ipad|ipod/i.test(ua) && !(window as { MSStream?: unknown }).MSStream;
     if (isIosDev) {
       setIsIos(true);
-      // iOS は beforeinstallprompt が来ないので、初回のみ案内を表示
       setTimeout(() => setShow(true), 3000);
       return;
     }
 
-    // Android / Chrome: beforeinstallprompt を待つ
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -62,25 +57,23 @@ export function PwaInstallBanner() {
   if (!show || dismissed || installed) return null;
 
   return (
-    <div
-      className="fixed bottom-20 md:bottom-6 left-4 right-4 md:left-auto md:right-6 md:w-80 z-50 animate-slide-up"
-    >
-      <div className="bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-2xl shadow-xl p-4 flex items-start gap-3">
+    <div className="fixed bottom-20 md:bottom-6 left-4 right-4 md:left-auto md:right-6 md:w-80 z-50 animate-slide-up">
+      <div className="bg-[#0c1424] border border-slate-700/60 rounded shadow-xl shadow-black/40 p-4 flex items-start gap-3">
         {/* アイコン */}
-        <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center shrink-0 shadow-sm">
+        <div className="w-10 h-10 rounded bg-teal-600 flex items-center justify-center shrink-0">
           <span className="text-white text-lg font-black leading-none">か</span>
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-surface-900 dark:text-white leading-tight">
+          <p className="text-sm font-black text-white leading-tight tracking-tight">
             ホーム画面に追加
           </p>
           {isIos ? (
-            <p className="text-xs text-surface-400 dark:text-surface-500 mt-1 leading-relaxed">
-              Safari の <span className="font-semibold">共有</span> → <span className="font-semibold">ホーム画面に追加</span> でインストールできます
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              Safari の <span className="font-semibold text-slate-400">共有</span> → <span className="font-semibold text-slate-400">ホーム画面に追加</span> でインストールできます
             </p>
           ) : (
-            <p className="text-xs text-surface-400 dark:text-surface-500 mt-1 leading-relaxed">
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
               アプリとしてインストールするとオフラインでも使えます
             </p>
           )}
@@ -88,14 +81,14 @@ export function PwaInstallBanner() {
           {!isIos && deferredPrompt && (
             <button
               onClick={handleInstall}
-              className="mt-2.5 flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
+              className="mt-2.5 flex items-center gap-1.5 bg-teal-600 hover:bg-teal-500 active:scale-95 text-white text-xs font-black px-3 py-1.5 rounded tracking-widest uppercase transition-all"
             >
               <Download size={12} />
               インストール
             </button>
           )}
           {isIos && (
-            <div className="mt-2 flex items-center gap-1.5 text-xs text-brand-600 dark:text-brand-400 font-medium">
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-teal-500 font-semibold">
               <Smartphone size={12} />
               Safari で開いて追加できます
             </div>
@@ -104,7 +97,7 @@ export function PwaInstallBanner() {
 
         <button
           onClick={handleDismiss}
-          className="p-1 rounded-lg text-surface-300 dark:text-surface-600 hover:text-surface-500 dark:hover:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors shrink-0"
+          className="p-1 rounded text-slate-600 hover:text-slate-400 hover:bg-slate-800/60 transition-colors shrink-0"
           aria-label="閉じる"
         >
           <X size={14} />

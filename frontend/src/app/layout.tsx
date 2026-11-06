@@ -75,7 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
-      <body className="min-h-screen bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-slate-100 font-sans antialiased">
+      <body className="min-h-screen bg-gray-50 dark:bg-[#060b16] text-gray-900 dark:text-slate-100 font-sans antialiased">
         <ServiceWorkerRegistration />
         <ToastProvider>
           <Navbar />

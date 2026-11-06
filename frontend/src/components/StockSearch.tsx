@@ -35,27 +35,27 @@ export function StockSearch() {
 
   return (
     <div ref={ref} className="relative w-full max-w-sm">
-      <div className="flex items-center border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 px-3 gap-2">
-        <Search size={16} className="text-gray-400" />
+      <div className="flex items-center border border-slate-700/60 rounded bg-[#0c1424] px-3 gap-2">
+        <Search size={16} className="text-slate-500" />
         <input
           type="text"
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="銘柄コード・企業名で検索..."
-          className="flex-1 py-2 text-sm bg-transparent outline-none placeholder-gray-400"
+          className="flex-1 py-2 text-sm bg-transparent outline-none placeholder-slate-600 text-slate-200"
         />
       </div>
 
       {open && results.length > 0 && (
-        <ul className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-lg overflow-hidden">
+        <ul className="absolute z-50 mt-1 w-full bg-[#0c1424] border border-slate-700/60 rounded shadow-lg overflow-hidden">
           {results.map(s => (
             <li key={s.code}>
               <button
                 onClick={() => go(s.code)}
-                className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors flex justify-between items-center"
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-[#060b16] transition-colors flex justify-between items-center"
               >
-                <span className="font-medium">{s.company_name}</span>
-                <span className="text-gray-400 text-xs ml-4">{s.code}</span>
+                <span className="font-medium text-slate-200">{s.company_name}</span>
+                <span className="text-slate-500 text-xs ml-4 font-mono">{s.code}</span>
               </button>
             </li>
           ))}
