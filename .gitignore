@@ -45,3 +45,7 @@ Thumbs.db
 *.log
 logs/
 frontend/tsconfig.tsbuildinfo
+
+# nginx.conf は setup-domain.sh で生成するためGit管理外
+# テンプレート (nginx.conf.template) はGit管理する
+nginx/nginx.conf

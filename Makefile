@@ -1,5 +1,5 @@
 # ── かぶみ (Kabumi) Makefile ─────────────────────────────────────────────
-.PHONY: help dev prod-up prod-down prod-logs migrate test lint build
+.PHONY: help dev prod-up prod-down prod-logs migrate test lint build domain-setup
 
 help:  ## このヘルプを表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -65,6 +65,10 @@ build:  ## 全 Docker イメージをビルド（プッシュなし）
 	docker compose -f docker-compose.yml -f docker-compose.prod.yml build
 
 # ── デプロイ補助 ─────────────────────────────────────────────────────────────
+domain-setup:  ## ドメイン名を nginx.conf と .env に反映 (例: make domain-setup DOMAIN=example.com)
+	@if [ -z "$(DOMAIN)" ]; then echo "❌  DOMAIN を指定してください: make domain-setup DOMAIN=example.com"; exit 1; fi
+	bash scripts/setup-domain.sh $(DOMAIN)
+
 ssl-init:  ## Let's Encrypt 証明書の初回取得 (ドメインを引数で指定)
 	@echo "Usage: make ssl-init DOMAIN=kabumi.app EMAIL=admin@example.com"
 	docker run --rm \
