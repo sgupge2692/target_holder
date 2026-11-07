@@ -94,7 +94,7 @@ services:
     restart: unless-stopped
     command: >
       sh -c "
-        echo '45 18 * * 1-5 cd /app && python /scripts/send_daily_signals.py >> /var/log/send_signals.log 2>&1' >> /etc/crontabs/root &&
+        echo '45 18 * * 1-5 cd /app && python /scripts/send_daily_signals.py >> /var/log/send_signals.log 2>&1' > /etc/crontabs/root &&
         echo '50 18 * * 1-5 cd /app && python /scripts/post_twitter.py >> /var/log/post_twitter.log 2>&1' >> /etc/crontabs/root &&
         echo '0  6  * * 1-5 cd /app && python pipeline/fetch_data.py >> /var/log/fetch_data.log 2>&1' >> /etc/crontabs/root &&
         echo '30 6  * * 1-5 cd /app && python pipeline/train.py >> /var/log/train.log 2>&1' >> /etc/crontabs/root &&
