@@ -69,13 +69,10 @@ domain-setup:  ## ドメイン名を nginx.conf と .env に反映 (例: make do
 	@if [ -z "$(DOMAIN)" ]; then echo "❌  DOMAIN を指定してください: make domain-setup DOMAIN=example.com"; exit 1; fi
 	bash scripts/setup-domain.sh $(DOMAIN)
 
-ssl-init:  ## Let's Encrypt 証明書の初回取得 (ドメインを引数で指定)
-	@echo "Usage: make ssl-init DOMAIN=kabumi.app EMAIL=admin@example.com"
-	docker run --rm \
-	  -v $(PWD)/nginx/ssl:/etc/letsencrypt \
-	  -v $(PWD)/nginx/certbot-www:/var/www/certbot \
-	  certbot/certbot certonly --webroot \
-	  -w /var/www/certbot \
+ssl-init:  ## Let's Encrypt 証明書の初回取得 (nginx 起動前に実行 / 80番ポートを使用)
+	@if [ -z "$(DOMAIN)" ] || [ -z "$(EMAIL)" ]; then echo "Usage: make ssl-init DOMAIN=example.com EMAIL=admin@example.com"; exit 1; fi
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm -p 80:80 \
+	  --entrypoint certbot certbot certonly --standalone \
 	  -d $(DOMAIN) -d www.$(DOMAIN) \
 	  --email $(EMAIL) --agree-tos --non-interactive
 
