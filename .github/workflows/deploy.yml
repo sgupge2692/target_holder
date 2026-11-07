@@ -37,21 +37,37 @@ jobs:
               exit 1
             fi
 
+            echo "=== nginx.conf チェック ==="
+            if [ ! -f nginx/nginx.conf ]; then
+              echo "ERROR: nginx/nginx.conf が存在しません。"
+              echo "  make domain-setup DOMAIN=<your-domain> を実行してください。"
+              exit 1
+            fi
+
             echo "=== フロントエンドビルド ==="
-            docker compose -f docker-compose.prod.yml build frontend
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml build frontend
 
             echo "=== バックエンドビルド ==="
-            docker compose -f docker-compose.prod.yml build backend
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml build backend
 
             echo "=== DBマイグレーション (Alembic) ==="
-            docker compose -f docker-compose.prod.yml run --rm backend \
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend \
               alembic upgrade head
 
             echo "=== コンテナ再起動 ==="
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
 
             echo "=== ヘルスチェック ==="
-            sleep 5
-            curl -sf http://localhost:8000/api/health || echo "WARNING: backend health check failed"
+            sleep 8
+            if command -v curl &>/dev/null; then
+              curl -sf http://localhost:8000/api/health \
+                && echo "✓ backend healthy" \
+                || echo "WARNING: backend health check failed"
+            else
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+                exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" \
+                && echo "✓ backend healthy" \
+                || echo "WARNING: backend health check failed"
+            fi
 
             echo "=== デプロイ完了 ✓ ==="

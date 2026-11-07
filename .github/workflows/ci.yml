@@ -64,7 +64,7 @@ jobs:
       - name: Build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
-          NEXT_PUBLIC_SITE_URL: https://kabumi.app
+          NEXT_PUBLIC_SITE_URL: https://example.com
         run: cd frontend && npm run build
 
   # ── scripts テスト ──────────────────────────────────────────────────
