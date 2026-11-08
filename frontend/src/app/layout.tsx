@@ -5,6 +5,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { ToastProvider } from "@/components/Toast";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { PwaInstallBanner } from "@/components/PwaInstallBanner";
+import { SiteFooter } from "@/components/SiteFooter";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://kabumi.app";
 
@@ -79,7 +80,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ServiceWorkerRegistration />
         <ToastProvider>
           <Navbar />
-          <main className="max-w-6xl mx-auto px-4 py-6 has-bottom-nav md:pb-8">{children}</main>
+          <main className="max-w-6xl mx-auto px-4 py-6 md:pb-8">{children}</main>
+          <SiteFooter />
           <BottomNav />
           <PwaInstallBanner />
         </ToastProvider>
