@@ -39,6 +39,55 @@ jobs:
           cd backend
           python -m pytest tests/ -v --tb=short
 
+  # ── バックエンド PostgreSQL 実機テスト ───────────────────────────────
+  # 通常のテストは SQLite なので、PostgreSQL に無い関数を使っても通ってしまう。
+  # 生 SQL を使う公開 API（シグナル・バックテスト）を PostgreSQL で流して、本番専用の不具合を防ぐ。
+  backend-test-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend deps
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Run PostgreSQL tests
+        env:
+          # アプリ本体の設定（import 時に必要）。テスト用の DB は TEST_POSTGRES_URL で渡す
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          TEST_POSTGRES_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/test"
+          JWT_SECRET: test-secret
+          STRIPE_SECRET_KEY: sk_test_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_dummy
+          STRIPE_PRICE_ID_PRO: price_dummy
+          TESTING: "1"
+        run: |
+          cd backend
+          python -m pytest tests/test_postgres_queries.py -v --tb=short
+
   # ── フロントエンド ビルド ────────────────────────────────────────────
   frontend-build:
     runs-on: ubuntu-latest
