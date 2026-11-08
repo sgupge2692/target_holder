@@ -187,3 +187,62 @@ def test_backtest_judges_by_excess_return():
     assert market == pytest.approx(-0.02)
     assert judge_signal("UP", ret["1001"] - market) is True
     assert judge_signal("UP", ret["1003"] - market) is False
+
+
+# ── 確率の校正 ──────────────────────────────────────────────────────────
+
+def _overconfident(n=6000, seed=0):
+    """真の上昇確率は 0.4〜0.6 だが、モデルは 0.1〜0.9 と過信して出力するケース"""
+    rng = np.random.default_rng(seed)
+    true_p = rng.uniform(0.4, 0.6, n)
+    y = (rng.uniform(size=n) < true_p).astype(int)
+    z = (true_p - 0.5) * 20                       # 傾きを 5 倍に増幅（過信）
+    return 1 / (1 + np.exp(-z)), y, true_p
+
+
+def test_platt_reduces_calibration_error_and_keeps_ranking():
+    from pipeline.evaluation import fit_platt, apply_platt, expected_calibration_error
+    p, y, _ = _overconfident()
+    params = fit_platt(p, y)
+    cal = apply_platt(p, params)
+
+    assert expected_calibration_error(y, cal) < expected_calibration_error(y, p) / 3
+    assert (np.argsort(p, kind="stable") == np.argsort(cal, kind="stable")).all()   # 順位は不変
+    assert 0.35 < cal.min() and cal.max() < 0.65                                     # 確率が実力の範囲に収まる
+
+
+def test_calibration_report_validates_on_future_folds():
+    from pipeline.evaluation import calibration_report
+    p, y, _ = _overconfident(n=6000)
+    fold = np.repeat(np.arange(1, 7), 1000)
+    params, m = calibration_report(p, y, fold)
+
+    assert m["ece_calibrated"] < m["ece_raw"]
+    assert m["brier_calibrated"] <= m["brier_raw"]
+    assert set(m["threshold_table"]) == {"0.52", "0.55", "0.60", "0.65"}
+    # 校正後は確度60%以上のシグナルがほぼ出なくなる（実力が 40〜60% の相手に 90% とは言えない）
+    assert m["threshold_table"]["0.65"]["coverage"] < 0.01
+    assert set(params) == {"a", "b"}
+
+
+def test_train_saves_calibrator_and_predict_applies_it(tmp_path, monkeypatch):
+    pytest.importorskip("lightgbm")
+    import joblib
+    import pipeline.train as train
+    from pipeline.predict import apply_calibration
+
+    monkeypatch.setattr(train, "MODEL_DIR", str(tmp_path))
+    monkeypatch.setattr(train, "FEATURE_COLS", ["rsi", "ma5_deviation"])
+    monkeypatch.setitem(train.DEFAULT_LGBM_PARAMS, "n_estimators", 60)
+    monkeypatch.setitem(train.DEFAULT_LGBM_PARAMS, "n_jobs", 1)
+
+    train.train_full(_panel(n_dates=140, n_codes=30, signal=1.0))
+    params = joblib.load(tmp_path / "calibrator.pkl")
+    assert set(params) == {"a", "b"}
+    metrics = joblib.load(tmp_path / "metrics.pkl")
+    assert "ece_calibrated" in metrics
+
+    p = np.array([0.1, 0.5, 0.9])
+    cal = apply_calibration(p, params)
+    assert (np.diff(cal) > 0).all()                       # 単調増加
+    assert np.array_equal(apply_calibration(p, None), p)  # 校正器が無ければそのまま

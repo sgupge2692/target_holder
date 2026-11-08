@@ -223,6 +223,28 @@ def load_models():
     return lgbm, xgb, scaler, weights, feat_cols
 
 
+def load_calibrator():
+    """確率校正パラメータ（train.py が保存）。無ければ None（未校正の確率をそのまま使う）。"""
+    path = f"{MODEL_DIR}/calibrator.pkl"
+    if not os.path.exists(path):
+        print("calibrator.pkl なし — 未校正の確率を使用します。")
+        return None
+    try:
+        return joblib.load(path)
+    except Exception as e:
+        print(f"calibrator 読み込み失敗 ({e}) — 未校正の確率を使用します。")
+        return None
+
+
+def apply_calibration(prob_up: np.ndarray, params: dict | None) -> np.ndarray:
+    """Platt scaling。単調増加なので銘柄の順位は変わらない。"""
+    if not params:
+        return prob_up
+    p = np.clip(prob_up, 1e-6, 1 - 1e-6)
+    z = params["a"] * np.log(p / (1 - p)) + params["b"]
+    return 1.0 / (1.0 + np.exp(-z))
+
+
 def main(output_summary: str | None = None, dry_run: bool = False):
     engine = create_engine(DATABASE_URL)
 
@@ -251,6 +273,8 @@ def main(output_summary: str | None = None, dry_run: bool = False):
     else:
         up_prob = lgbm_prob
 
+    up_prob = apply_calibration(up_prob, load_calibrator())
+
     proba = np.column_stack([1 - up_prob, up_prob])
     latest_valid = latest.loc[valid_idx].copy()
     latest_valid["up_probability"] = up_prob
@@ -262,6 +286,10 @@ def main(output_summary: str | None = None, dry_run: bool = False):
 
     # シグナルのみ対象
     signals = latest_valid[latest_valid["signal"] != "NEUTRAL"].copy()
+    if signals.empty:
+        print(f"[WARN] 確度 {CONFIDENCE_THRESHOLD:.0%} 以上のシグナルが 0 件です。"
+              f"校正後の確率は 50% 付近に寄るため、train.py が出力する"
+              f"「確度しきい値ごとの出現率と的中率」を見て CONFIDENCE_THRESHOLD を調整してください。")
 
     # LLM で説明生成（UP/DOWN のみ、バッチ処理）
     explanations = []

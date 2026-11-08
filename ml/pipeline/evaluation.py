@@ -137,3 +137,104 @@ def evaluate_predictions(
     else:
         out["hit_rate_conf"] = float("nan")
     return out
+
+
+# ────────────────────────────────────────────────────────────────
+# 確率の校正（Platt scaling）
+# ────────────────────────────────────────────────────────────────
+#
+# モデルの出力確率は scale_pos_weight などで偏り、「65%」が実際に65%とは限らない。
+# 時系列CVの out-of-fold 予測に 2 パラメータのロジスティック回帰を当てて校正する。
+# 単調増加なので銘柄の順位は変わらず、確率の「値」だけが実績に合う。
+# （等温回帰は階段状になり同点が増えるので、順位を保てる Platt を採用）
+
+_EPS = 1e-6
+
+
+def _logit(p: np.ndarray) -> np.ndarray:
+    p = np.clip(np.asarray(p, dtype=float), _EPS, 1 - _EPS)
+    return np.log(p / (1 - p))
+
+
+def fit_platt(prob_up: np.ndarray, y_true: np.ndarray) -> dict:
+    """校正パラメータ {"a": 傾き, "b": 切片} を返す（pickle に安全な dict）"""
+    from sklearn.linear_model import LogisticRegression
+    lr = LogisticRegression(C=1e6, solver="lbfgs", max_iter=1000)
+    lr.fit(_logit(prob_up).reshape(-1, 1), np.asarray(y_true))
+    return {"a": float(lr.coef_[0][0]), "b": float(lr.intercept_[0])}
+
+
+def apply_platt(prob_up: np.ndarray, params: dict) -> np.ndarray:
+    z = params["a"] * _logit(prob_up) + params["b"]
+    return 1.0 / (1.0 + np.exp(-z))
+
+
+def expected_calibration_error(y_true: np.ndarray, prob_up: np.ndarray, n_bins: int = 10) -> float:
+    """
+    ECE: 確率を等幅ビンに分け、各ビンの「予測確率の平均」と「実際の上昇率」のずれの加重平均。
+    0 に近いほど「65% と言ったら 65% 当たる」状態。
+    """
+    y = np.asarray(y_true, dtype=float)
+    p = np.asarray(prob_up, dtype=float)
+    bins = np.clip((p * n_bins).astype(int), 0, n_bins - 1)
+    ece = 0.0
+    for b in range(n_bins):
+        m = bins == b
+        if m.any():
+            ece += m.mean() * abs(p[m].mean() - y[m].mean())
+    return float(ece)
+
+
+def calibration_report(
+    oof_prob: np.ndarray,
+    oof_y: np.ndarray,
+    oof_fold: np.ndarray,
+    thresholds: tuple = (0.52, 0.55, 0.60, 0.65),
+) -> tuple[dict, dict]:
+    """
+    out-of-fold 予測から校正器を作り、効果を「未来側のフォールド」で検証する。
+
+    検証: フォールド k の校正は、フォールド k より前の予測だけで学習した校正器で行う。
+    Returns:
+        (校正パラメータ, 指標 dict)
+    """
+    from sklearn.metrics import brier_score_loss
+
+    oof_prob = np.asarray(oof_prob, dtype=float)
+    oof_y = np.asarray(oof_y)
+    folds = sorted(set(oof_fold.tolist()))
+
+    raw_all, cal_all, y_all = [], [], []
+    for k in folds[1:]:
+        past = oof_fold < k
+        cur = oof_fold == k
+        if past.sum() < 200 or len(np.unique(oof_y[past])) < 2:
+            continue
+        params_k = fit_platt(oof_prob[past], oof_y[past])
+        raw_all.append(oof_prob[cur])
+        cal_all.append(apply_platt(oof_prob[cur], params_k))
+        y_all.append(oof_y[cur])
+
+    metrics: dict = {}
+    if y_all:
+        raw, cal, yy = np.concatenate(raw_all), np.concatenate(cal_all), np.concatenate(y_all)
+        metrics = {
+            "ece_raw": expected_calibration_error(yy, raw),
+            "ece_calibrated": expected_calibration_error(yy, cal),
+            "brier_raw": float(brier_score_loss(yy, raw)),
+            "brier_calibrated": float(brier_score_loss(yy, cal)),
+        }
+
+    params = fit_platt(oof_prob, oof_y)
+    cal_final = apply_platt(oof_prob, params)
+
+    # 確度しきい値ごとの「出現率」と「的中率」（校正後の確率で）
+    table = {}
+    for t in thresholds:
+        up, down = cal_final >= t, cal_final <= 1 - t
+        picked = up | down
+        hit = ((up & (oof_y == 1)) | (down & (oof_y == 0)))[picked].mean() if picked.any() else float("nan")
+        table[f"{t:.2f}"] = {"coverage": float(picked.mean()), "hit_rate": float(hit)}
+    metrics["threshold_table"] = table
+    metrics["calibration"] = params
+    return params, metrics

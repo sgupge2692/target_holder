@@ -27,9 +27,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
-    from pipeline.evaluation import walk_forward_splits, split_for_early_stopping, evaluate_predictions
+    from pipeline.evaluation import (
+        walk_forward_splits, split_for_early_stopping, evaluate_predictions, calibration_report,
+    )
 except ImportError:  # python pipeline/train.py で直接実行する場合
-    from evaluation import walk_forward_splits, split_for_early_stopping, evaluate_predictions
+    from evaluation import (
+        walk_forward_splits, split_for_early_stopping, evaluate_predictions, calibration_report,
+    )
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 MODEL_DIR = os.getenv("MODEL_DIR", "/app/models")
@@ -176,6 +180,21 @@ def _mean_metric(rows: list, key: str) -> float:
     return float(np.nanmean([r[key] for r in rows]))
 
 
+def _calibrate_and_save(oof_prob: list, oof_y: list, oof_fold: list) -> dict:
+    """OOF 予測から確率校正器を作って保存し、検証指標を返す。"""
+    params, m = calibration_report(
+        np.concatenate(oof_prob), np.concatenate(oof_y), np.concatenate(oof_fold),
+    )
+    joblib.dump(params, f"{MODEL_DIR}/calibrator.pkl")
+    if "ece_raw" in m:
+        print(f"  確率校正（未来フォールドで検証）: ECE {m['ece_raw']:.4f} → {m['ece_calibrated']:.4f} / "
+              f"Brier {m['brier_raw']:.4f} → {m['brier_calibrated']:.4f}")
+    print("  確度しきい値ごとの出現率と的中率（校正後）:")
+    for t, v in m["threshold_table"].items():
+        print(f"    ≥{t}: 出現率 {v['coverage']:.1%}  的中率 {v['hit_rate']:.3f}")
+    return {k: v for k, v in m.items() if k not in ("threshold_table", "calibration")}
+
+
 # ────────────────────────────────────────────────────────────────
 # フル学習 (LightGBM)
 # ────────────────────────────────────────────────────────────────
@@ -190,6 +209,7 @@ def train_full(df: pd.DataFrame, params: dict = None):
     # 木モデルはスケール不変なので CV は生の特徴量で行う（scaler は predict.py 互換のため保存のみ）
     Xv = X.values
     folds, best_iters = [], []
+    oof_prob, oof_y, oof_fold = [], [], []
     print("=== LightGBM ウォークフォワードCV（日付分割・embargo付き）===")
     for fold, (tr_idx, val_idx) in enumerate(walk_forward_splits(meta["Date"], N_SPLITS, EMBARGO_DAYS), 1):
         fit_idx, es_idx = split_for_early_stopping(tr_idx, meta["Date"], embargo_days=EMBARGO_DAYS)
@@ -205,6 +225,7 @@ def train_full(df: pd.DataFrame, params: dict = None):
             meta["next_return"].iloc[val_idx].values, TOP_K, CONFIDENCE,
         )
         folds.append(res)
+        oof_prob.append(prob); oof_y.append(y.iloc[val_idx].values); oof_fold.append(np.full(len(val_idx), fold))
         best_iters.append(m.best_iteration_ or params["n_estimators"])
         print(f"  Fold {fold} (train {len(tr_idx)} / val {len(val_idx)}, best_iter {best_iters[-1]})")
         _print_eval("LGBM", res)
@@ -213,6 +234,8 @@ def train_full(df: pd.DataFrame, params: dict = None):
     std_auc = float(np.nanstd([r["auc"] for r in folds]))
     print(f"  Mean AUC: {mean_auc:.4f} ± {std_auc:.4f}  /  日別AUC {_mean_metric(folds, 'daily_auc'):.4f}  "
           f"/  IC {_mean_metric(folds, 'daily_ic'):+.4f}")
+
+    calib_metrics = _calibrate_and_save(oof_prob, oof_y, oof_fold)
 
     # 最終モデル: CV で見つけた木の本数に固定（全データを 1000 本で学習すると過学習する）
     final_params = {**params, "n_estimators": max(int(np.mean(best_iters) * 1.1), 50)}
@@ -230,6 +253,7 @@ def train_full(df: pd.DataFrame, params: dict = None):
         "daily_ic": _mean_metric(folds, "daily_ic"),
         "precision_topk": _mean_metric(folds, "precision_topk"),
         "hit_rate_conf": _mean_metric(folds, "hit_rate_conf"),
+        **calib_metrics,
     }, f"{MODEL_DIR}/metrics.pkl")
     print("LightGBM model saved.")
     return mean_auc
@@ -253,6 +277,7 @@ def train_ensemble(df: pd.DataFrame):
 
     lgbm_rows, xgb_rows, ens_rows = [], [], []
     lgbm_iters, xgb_iters = [], []
+    oof_prob, oof_y, oof_fold = [], [], []
 
     print("=== アンサンブル ウォークフォワードCV（日付分割・embargo付き）===")
     for fold, (tr_idx, val_idx) in enumerate(walk_forward_splits(meta["Date"], N_SPLITS, EMBARGO_DAYS), 1):
@@ -282,6 +307,7 @@ def train_ensemble(df: pd.DataFrame):
         ens_res = evaluate_predictions(dates_val, y_val, ens_prob, ret_val, TOP_K, CONFIDENCE)
 
         lgbm_rows.append(lgbm_res); xgb_rows.append(xgb_res); ens_rows.append(ens_res)
+        oof_prob.append(ens_prob); oof_y.append(y_val); oof_fold.append(np.full(len(val_idx), fold))
         lgbm_iters.append(lgbm.best_iteration_ or DEFAULT_LGBM_PARAMS["n_estimators"])
         xgb_iters.append((getattr(xgb, "best_iteration", None) or DEFAULT_XGB_PARAMS["n_estimators"]) + 1)
 
@@ -296,6 +322,8 @@ def train_ensemble(df: pd.DataFrame):
     print(f"  Mean AUC — LGBM: {mean_lgbm:.4f}  XGB: {mean_xgb:.4f}  Ensemble: {mean_ens:.4f}")
     print(f"  Ensemble 日別AUC {_mean_metric(ens_rows, 'daily_auc'):.4f} / IC {_mean_metric(ens_rows, 'daily_ic'):+.4f} "
           f"/ 上位{TOP_K}的中 {_mean_metric(ens_rows, 'precision_topk'):.3f}")
+
+    calib_metrics = _calibrate_and_save(oof_prob, oof_y, oof_fold)
 
     # 最終モデル: CV で見つけた木の本数に固定して全データで学習
     scaler = StandardScaler()
@@ -328,6 +356,7 @@ def train_ensemble(df: pd.DataFrame):
         "daily_ic": _mean_metric(ens_rows, "daily_ic"),
         "precision_topk": _mean_metric(ens_rows, "precision_topk"),
         "hit_rate_conf": _mean_metric(ens_rows, "hit_rate_conf"),
+        **calib_metrics,
     }, f"{MODEL_DIR}/metrics.pkl")
     print(f"Ensemble saved. Weights — LGBM: {w_lgbm:.3f}  XGB: {w_xgb:.3f}")
 
