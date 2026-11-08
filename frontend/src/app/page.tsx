@@ -7,6 +7,7 @@ import { getLatestSignals, getAccuracy, downloadSignalsCsv, type Signal, type Ac
 import { SignalBadge } from "@/components/SignalBadge";
 import { StockSearch } from "@/components/StockSearch";
 import { LandingPage } from "@/components/LandingPage";
+import { SignalLimitBanner } from "@/components/SignalLimitBanner";
 import { SignalRowSkeleton, SignalCardSkeleton, StatCardSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/Toast";
@@ -521,7 +522,9 @@ export default function HomePage() {
       {user?.plan === "free" && (
         <div className="flex items-center justify-between rounded border border-amber-200 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-900/8 px-4 py-2.5 text-sm">
           <div>
-            <p className="font-black text-amber-800 dark:text-amber-300 text-xs tracking-wide">無料プランは上位 10 件まで</p>
+            <p className="font-black text-amber-800 dark:text-amber-300 text-xs tracking-wide">
+              無料プランは確度の高い上位 {signalData?.free_limit ?? 3} 件まで
+            </p>
             <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">Pro プランで全件表示・CSV・スイング / 長期 / 信用売りモード</p>
           </div>
           <Link
@@ -626,6 +629,15 @@ export default function HomePage() {
               </tbody>
             </table>
           </div>
+
+          {/* 無料プランの制限に達したときのアップグレード誘導 */}
+          {signalData?.is_limited && (
+            <SignalLimitBanner
+              shown={signalData.signals.length}
+              totalAvailable={signalData.total_available}
+              freeLimit={signalData.free_limit}
+            />
+          )}
         </>
       )}
     </div>

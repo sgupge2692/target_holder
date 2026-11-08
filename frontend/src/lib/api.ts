@@ -70,8 +70,17 @@ export interface AccuracyRow {
   accuracy_pct: number; avg_return_pct: number;
 }
 
+export interface LatestSignalsResponse {
+  signals: Signal[];
+  plan: string;
+  total: number;            // 今回返した件数
+  total_available: number;  // 制限前の総件数（「あと○件」表示用）
+  is_limited: boolean;      // 無料プランの閲覧制限が効いているか
+  free_limit: number;       // 無料プランで閲覧できる件数
+}
+
 export const getLatestSignals = (signal?: "UP" | "DOWN") =>
-  apiFetch<{ signals: Signal[]; plan: string; total: number }>(
+  apiFetch<LatestSignalsResponse>(
     `/api/signals/latest${signal ? `?signal=${signal}` : ""}`
   );
 

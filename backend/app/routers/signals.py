@@ -1,6 +1,6 @@
 """
 シグナル API
-- GET /api/signals/latest         : 最新シグナル一覧（無料: 上位10件、Pro: 全件）
+- GET /api/signals/latest         : 最新シグナル一覧（無料: 確度上位 FREE_SIGNAL_LIMIT 件、Pro: 全件）
 - GET /api/signals/history/{code} : 銘柄別シグナル履歴
 - GET /api/signals/accuracy       : 精度サマリー（全期間）キャッシュ5分
 - GET /api/signals/backtest/chart : 月別精度推移チャートデータ キャッシュ5分
@@ -22,7 +22,7 @@ from app.cache import cache_get, cache_set, cache_key
 
 router = APIRouter(prefix="/api/signals", tags=["signals"])
 
-FREE_SIGNAL_LIMIT = 10  # 無料プランで見られるシグナル数
+FREE_SIGNAL_LIMIT = 3   # 無料プランで見られるシグナル数（課金動機の中核。変更はここだけ）
 CACHE_TTL_SHORT = 300   # 5分
 CACHE_TTL_LONG = 1800   # 30分（バックテスト等）
 
@@ -36,12 +36,26 @@ async def get_latest_signals(
     is_pro = current_user.plan == "pro"
     limit = 9999 if is_pro else FREE_SIGNAL_LIMIT
 
-    where = 'WHERE p.signal = :signal' if signal else ""
-    params: dict = {"limit": limit}
+    # 各銘柄の最新シグナルを1件取得（PostgreSQL / SQLite 両対応）
+    # ※ フィルタは AND で連結する（WHERE の二重指定は構文エラーになる）
+    signal_clause = "AND p.signal = :signal" if signal else ""
+    params: dict = {}
     if signal:
         params["signal"] = signal
 
-    # 各銘柄の最新シグナルを1件取得（PostgreSQL / SQLite 両対応）
+    # 無料ユーザーに「あと○件」を見せるため、制限前の総件数を別途数える
+    count_row = await db.execute(text(f"""
+        SELECT COUNT(*) AS n
+        FROM predictions p
+        WHERE p.id IN (
+            SELECT MAX(id) FROM predictions GROUP BY "Code"
+        )
+        {signal_clause}
+    """), params)
+    total_available = int(count_row.scalar() or 0)
+
+    # 確度の高い順（UP は上昇確率、DOWN は下落確率が高い順）。
+    # 無料枠は「最も確度の高い数件」になるので、並び順が体験の質に直結する。
     rows = await db.execute(text(f"""
         SELECT p."Code", p."Date", p.signal, p.up_probability,
                p.actual_return, p.is_correct,
@@ -52,13 +66,22 @@ async def get_latest_signals(
         WHERE p.id IN (
             SELECT MAX(id) FROM predictions GROUP BY "Code"
         )
-        {where}
-        ORDER BY p.up_probability DESC
+        {signal_clause}
+        ORDER BY CASE WHEN p.up_probability >= 0.5
+                      THEN p.up_probability
+                      ELSE 1 - p.up_probability END DESC
         LIMIT :limit
-    """), params)
+    """), {**params, "limit": limit})
 
     result = [dict(r._mapping) for r in rows]
-    return {"signals": result, "plan": current_user.plan, "total": len(result)}
+    return {
+        "signals": result,
+        "plan": current_user.plan,
+        "total": len(result),
+        "total_available": total_available,
+        "is_limited": (not is_pro) and total_available > len(result),
+        "free_limit": FREE_SIGNAL_LIMIT,
+    }
 
 
 @router.get("/history/{code}")
