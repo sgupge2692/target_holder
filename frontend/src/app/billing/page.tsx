@@ -1,13 +1,13 @@
 "use client";
 import { useState } from "react";
 import useSWR from "swr";
-import { createCheckout, createPortal, getSubscription } from "@/lib/api";
+import { createCheckout, createPortal, getBillingPlans, getSubscription, type BillingInterval } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { Check, X, CreditCard, ExternalLink, Zap, Crown, Shield, Lock } from "lucide-react";
 
 // Free / Pro 機能比較
 const FEATURE_ROWS = [
-  { label: "シグナル閲覧",       free: "上位10件",       pro: "全件（数百銘柄）",   highlight: true },
+  { label: "シグナル閲覧",       free: "上位3件",        pro: "全件（数百銘柄）",   highlight: true },
   { label: "株価チャート",       free: "直近30日",       pro: "全期間",            highlight: false },
   { label: "シグナル履歴",       free: "直近5件",        pro: "全期間",            highlight: false },
   { label: "確率バー表示",       free: true,             pro: true,               highlight: false },
@@ -25,18 +25,32 @@ function FeatureValue({ val }: { val: boolean | string }) {
   return <span className="text-xs font-medium text-slate-300">{val}</span>;
 }
 
+// Stripe から金額を取得できないときの表示用（実際の請求額は Stripe の Price で決まる）
+const DEFAULT_MONTHLY_AMOUNT = 2980;
+const DEFAULT_YEARLY_AMOUNT  = 29800;
+
+const yen = (n: number) => `¥${n.toLocaleString("ja-JP")}`;
+
 export default function BillingPage() {
   const { user } = useAuth();
   const [loading, setLoading]       = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [interval, setInterval]     = useState<BillingInterval>("month");
 
   const { data: sub } = useSWR(user?.plan === "pro" ? "subscription" : null, getSubscription);
+  const { data: plans } = useSWR("billing-plans", getBillingPlans);
+
+  const yearlyAvailable = plans?.yearly_available ?? false;
+  const monthlyAmount = plans?.monthly_amount ?? DEFAULT_MONTHLY_AMOUNT;
+  const yearlyAmount  = plans?.yearly_amount  ?? DEFAULT_YEARLY_AMOUNT;
+  const isYearly      = yearlyAvailable && interval === "year";
+  const yearlySaving  = monthlyAmount * 12 - yearlyAmount;   // 年払いにすると何円お得か
 
   const checkout = async () => {
     if (!user) { window.location.href = "/auth"; return; }
     setLoading(true);
     try {
-      const { url } = await createCheckout();
+      const { url } = await createCheckout(isYearly ? "year" : "month");
       window.location.href = url;
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "エラーが発生しました");
@@ -143,11 +157,39 @@ export default function BillingPage() {
               <Crown size={15} className="text-teal-500" />
               <span className="text-[10px] font-black tracking-widest uppercase text-teal-400">Proプラン</span>
             </div>
+            {yearlyAvailable && (
+              <div className="mb-3 inline-flex rounded border border-slate-700/60 p-0.5 text-[11px] font-black">
+                {(["month", "year"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setInterval(v)}
+                    className={`px-3 py-1 rounded transition-colors ${
+                      interval === v ? "bg-teal-600 text-white" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {v === "month" ? "月払い" : "年払い"}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-1">
-              <span className="text-4xl font-black text-white">¥2,980</span>
-              <span className="text-slate-500 text-sm mb-1"> /月</span>
+              <span className="text-4xl font-black text-white">
+                {yen(isYearly ? yearlyAmount : monthlyAmount)}
+              </span>
+              <span className="text-slate-500 text-sm mb-1"> {isYearly ? "/年" : "/月"}</span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">いつでも解約可能</p>
+            {isYearly ? (
+              <p className="text-xs text-teal-400 mt-1">
+                月あたり {yen(Math.round(yearlyAmount / 12))} · 月払いより {yen(yearlySaving)} お得
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 mt-1">いつでも解約可能</p>
+            )}
+            {isYearly && (
+              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                1年分を一括でお支払いいただきます。解約しても期間満了まで利用でき、期間中の返金はありません。
+              </p>
+            )}
           </div>
           <div className="relative z-10 flex-1" />
           <div className="relative z-10 mt-6">

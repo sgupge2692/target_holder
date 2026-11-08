@@ -403,7 +403,7 @@ export function LandingPage() {
             cta="無料で始める"
             href="/auth"
             features={[
-              { text: "毎日のシグナル（上位10件）", included: true },
+              { text: "毎日のシグナル（上位3件）", included: true },
               { text: "シグナル確率表示",          included: true },
               { text: "バックテスト結果閲覧",       included: true },
               { text: "銘柄検索",                  included: true },

@@ -42,8 +42,21 @@ export const getMe = () => apiFetch<MeResponse>("/api/auth/me");
 
 // ── 課金 ─────────────────────────────────────────────────────
 
-export const createCheckout = () =>
-  apiFetch<{ url: string }>("/api/billing/checkout", { method: "POST" });
+export type BillingInterval = "month" | "year";
+
+export interface BillingPlans {
+  yearly_available: boolean;
+  monthly_amount: number | null;   // 円。Stripe の Price から取得（取得できなければ null）
+  yearly_amount: number | null;
+}
+
+export const getBillingPlans = () => apiFetch<BillingPlans>("/api/billing/plans");
+
+export const createCheckout = (interval: BillingInterval = "month") =>
+  apiFetch<{ url: string }>("/api/billing/checkout", {
+    method: "POST",
+    body: JSON.stringify({ interval }),
+  });
 
 export const createPortal = () =>
   apiFetch<{ url: string }>("/api/billing/portal", { method: "POST" });

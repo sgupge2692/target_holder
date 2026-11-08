@@ -1,11 +1,14 @@
 """
 課金エンドポイント (Stripe)
-- POST /api/billing/checkout  : Stripe Checkout セッション作成
+- GET  /api/billing/plans     : 利用可能な課金間隔と金額（月払い/年払い）
+- POST /api/billing/checkout  : Stripe Checkout セッション作成（interval: month | year）
 - POST /api/billing/portal    : 顧客ポータル URL 取得
 - POST /api/billing/webhook   : Stripe Webhook 受信
 """
+import time
 import stripe
 from datetime import datetime, timezone
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -24,8 +27,18 @@ stripe.api_key = settings.stripe_secret_key
 
 # ── スキーマ ──────────────────────────────────────────────────
 
+class CheckoutRequest(BaseModel):
+    interval: Literal["month", "year"] = "month"
+
+
 class CheckoutResponse(BaseModel):
     url: str
+
+
+class PlansResponse(BaseModel):
+    yearly_available: bool
+    monthly_amount: Optional[int] = None   # 円（Stripe の Price から取得。取得できなければ None）
+    yearly_amount: Optional[int] = None
 
 
 class PortalResponse(BaseModel):
@@ -33,6 +46,30 @@ class PortalResponse(BaseModel):
 
 
 # ── ヘルパー ──────────────────────────────────────────────────
+
+_PRICE_CACHE: dict[str, tuple[float, Optional[int]]] = {}
+_PRICE_CACHE_TTL = 600  # 秒
+
+
+def _price_id_for(interval: str) -> str:
+    return settings.stripe_price_id_pro_yearly if interval == "year" else settings.stripe_price_id_pro
+
+
+def _price_amount(price_id: str) -> Optional[int]:
+    """Stripe の Price から金額（JPY は最小単位=円）を取得。表示と実際の請求額がずれないようにする。"""
+    if not price_id or not settings.stripe_secret_key:
+        return None
+    now = time.monotonic()
+    cached = _PRICE_CACHE.get(price_id)
+    if cached and now - cached[0] < _PRICE_CACHE_TTL:
+        return cached[1]
+    try:
+        amount = stripe.Price.retrieve(price_id).unit_amount
+    except Exception:
+        amount = None
+    _PRICE_CACHE[price_id] = (now, amount)
+    return amount
+
 
 async def _get_or_create_customer(user: User, db: AsyncSession) -> str:
     """Stripe 顧客IDを取得 or 新規作成してDBに保存"""
@@ -47,14 +84,33 @@ async def _get_or_create_customer(user: User, db: AsyncSession) -> str:
 
 # ── エンドポイント ────────────────────────────────────────────
 
+@router.get("/plans", response_model=PlansResponse)
+async def get_plans():
+    """月払い・年払いの利用可否と金額（認証不要。料金ページ用）"""
+    yearly_id = settings.stripe_price_id_pro_yearly
+    return PlansResponse(
+        yearly_available=bool(yearly_id),
+        monthly_amount=_price_amount(settings.stripe_price_id_pro),
+        yearly_amount=_price_amount(yearly_id),
+    )
+
+
 @router.post("/checkout", response_model=CheckoutResponse)
 async def create_checkout_session(
+    body: Optional[CheckoutRequest] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Stripe Checkout セッションを作成して支払いページ URL を返す"""
+    """Stripe Checkout セッションを作成して支払いページ URL を返す（body 省略時は月払い）"""
     if not settings.stripe_secret_key:
         raise HTTPException(status_code=503, detail="Stripe 未設定")
+
+    interval = body.interval if body else "month"
+    if interval == "year" and not settings.stripe_price_id_pro_yearly:
+        raise HTTPException(status_code=400, detail="年払いプランは現在ご利用いただけません")
+    if current_user.plan == "pro":
+        # 二重にサブスクリプションを作らない（プラン変更・解約はポータルから）
+        raise HTTPException(status_code=400, detail="すでにProプランです。プランの変更はカスタマーポータルから行えます")
 
     customer_id = await _get_or_create_customer(current_user, db)
 
@@ -62,11 +118,11 @@ async def create_checkout_session(
     session = stripe.checkout.Session.create(
         customer=customer_id,
         payment_method_types=["card"],
-        line_items=[{"price": settings.stripe_price_id_pro, "quantity": 1}],
+        line_items=[{"price": _price_id_for(interval), "quantity": 1}],
         mode="subscription",
         success_url=f"{base}/billing/success",
         cancel_url=f"{base}/billing",
-        metadata={"user_id": str(current_user.id)},
+        metadata={"user_id": str(current_user.id), "interval": interval},
     )
     return CheckoutResponse(url=session.url)
 
