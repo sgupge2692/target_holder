@@ -46,6 +46,8 @@ async def test_engine():
                 explanation TEXT,
                 key_factors TEXT,
                 actual_return REAL,
+                market_return REAL,
+                excess_return REAL,
                 is_correct INTEGER
             )
         """))

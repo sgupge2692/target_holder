@@ -124,7 +124,7 @@ function WatchlistCard({ item, onRemove }: { item: WatchlistItem; onRemove: () =
         </div>
         {item.up_probability != null && (
           <div className="flex-1 max-w-[140px]">
-            <div className="text-[10px] font-black tracking-widest uppercase text-slate-500 mb-1 text-right">上昇確率</div>
+            <div className="text-[10px] font-black tracking-widest uppercase text-slate-500 mb-1 text-right">市場超過確率</div>
             <MiniProbBar prob={item.up_probability} />
           </div>
         )}

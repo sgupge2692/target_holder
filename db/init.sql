@@ -64,7 +64,9 @@ CREATE TABLE IF NOT EXISTS predictions (
     signal VARCHAR(10) NOT NULL,
     predicted_at TIMESTAMP DEFAULT NOW(),
     actual_return NUMERIC,  -- 後から実績を記録
-    is_correct BOOLEAN      -- 的中フラグ
+    market_return NUMERIC,  -- 同期間の全銘柄リターン中央値
+    excess_return NUMERIC,  -- actual_return - market_return
+    is_correct BOOLEAN      -- 的中フラグ（市場超過の符号で判定）
 );
 
 -- インデックス

@@ -266,10 +266,10 @@ export function LandingPage() {
           {/* 実績バッジ */}
           <div className="flex flex-wrap gap-3 pt-1">
             {upRow && (
-              <StatBadge value={`${upRow.accuracy_pct}%`} label={`上昇的中率 (n=${upRow.total})`} isUp={true} />
+              <StatBadge value={`${upRow.accuracy_pct}%`} label={`UP 的中率・対市場 (n=${upRow.total})`} isUp={true} />
             )}
             {downRow && (
-              <StatBadge value={`${downRow.accuracy_pct}%`} label={`下落的中率 (n=${downRow.total})`} isUp={false} />
+              <StatBadge value={`${downRow.accuracy_pct}%`} label={`DOWN 的中率・対市場 (n=${downRow.total})`} isUp={false} />
             )}
             {lastCumReturn != null && (
               <StatBadge
@@ -312,7 +312,7 @@ export function LandingPage() {
             どうやって<br />予測するの？
           </h2>
           <p className="text-sm text-slate-500 leading-relaxed">
-            毎日3ステップで、翌日上昇・下落が期待される銘柄を自動選定します。
+            毎日3ステップで、翌日に市場平均を上回る・下回ると予測される銘柄を自動選定します。
           </p>
         </div>
         <div>

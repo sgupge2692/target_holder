@@ -148,16 +148,18 @@ def _fmt_feature_value(name: str, val: float) -> str:
 
 
 def build_prompt(code: str, signal: str, up_prob: float, top_features: list[dict]) -> str:
-    direction = "上昇" if signal == "UP" else "下落"
+    # モデルは「翌日、市場平均（全銘柄の中央値）を上回るか」を予測している
+    direction = "市場平均を上回る" if signal == "UP" else "市場平均を下回る"
     feat_lines = "\n".join(
         f"  - {f['label']}: {_fmt_feature_value(f['name'], f['value'])}" for f in top_features
     )
     return f"""あなたは株式テクニカル分析の専門家です。
 以下の情報をもとに、銘柄 {code} の翌日予測シグナル（{direction}）の理由を
 個人投資家向けに分かりやすい日本語で説明してください。
+注意: これは株価の絶対的な上げ下げではなく、市場全体の動きに対する相対的な強弱の予測です。
 
-予測シグナル: {signal}（{direction}予測）
-上昇確率: {up_prob:.1%}
+予測シグナル: {signal}（{direction}と予測）
+市場超過確率（市場平均を上回る確率）: {up_prob:.1%}
 
 モデルが重視した主要指標（上位5件）:
 {feat_lines}
@@ -165,7 +167,7 @@ def build_prompt(code: str, signal: str, up_prob: float, top_features: list[dict
 指示:
 - 数字は具体的に引用してください（例: RSI 28.3 → 売られ過ぎ水準）
 - 専門用語は簡単な補足をつけてください
-- {direction}の根拠を明確に述べてください
+- {direction}と予測する根拠を明確に述べてください
 
 以下の JSON 形式のみで回答してください（他のテキスト不要）:
 {{

@@ -267,6 +267,9 @@ def calc_features_single(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[df["next_return"] >  dynamic_threshold, "label"] =  1
     df.loc[df["next_return"] < -dynamic_threshold, "label"] = -1
 
+    # 超過リターンラベル（add_excess_labels）で使う銘柄ごとのしきい値
+    df["label_threshold"] = dynamic_threshold
+
     return df
 
 
@@ -320,6 +323,38 @@ def add_relative_features(df_all: pd.DataFrame) -> pd.DataFrame:
         df_all["sector_relative_rsi"]    = 0.0
         df_all["sector_relative_ma5"]    = 0.0
 
+    return df_all
+
+
+# ────────────────────────────────────────────────────────────────
+# 市場超過リターンラベル
+# ────────────────────────────────────────────────────────────────
+
+# 超過リターンの絶対値が「その銘柄のしきい値 × この比率」未満なら中立（学習から除外）。
+# 超過リターンは生のリターンより振れ幅が小さいため、従来ラベルと同じしきい値は使わない。
+EXCESS_NEUTRAL_RATIO = 0.3
+
+
+def add_excess_labels(df_all: pd.DataFrame, neutral_ratio: float = EXCESS_NEUTRAL_RATIO) -> pd.DataFrame:
+    """
+    目的変数を「市場平均に対する超過リターン」に変える。
+
+    翌日の相場全体の動き（地合い）は銘柄選びでは予測できないノイズなので、
+    各日の全銘柄の翌日リターン中央値を引いて、銘柄ごとの相対的な強弱だけを予測させる。
+
+    追加する列:
+      market_return : その日の全銘柄の翌日リターン中央値
+      excess_return : next_return - market_return
+      label_excess  : +1 市場を明確に上回る / -1 明確に下回る / 0 中立（学習対象外）
+    """
+    df_all = df_all.copy()
+    df_all["market_return"] = df_all.groupby("Date")["next_return"].transform("median")
+    df_all["excess_return"] = df_all["next_return"] - df_all["market_return"]
+
+    band = df_all["label_threshold"] * neutral_ratio
+    df_all["label_excess"] = 0
+    df_all.loc[df_all["excess_return"] >  band, "label_excess"] =  1
+    df_all.loc[df_all["excess_return"] < -band, "label_excess"] = -1
     return df_all
 
 
@@ -394,6 +429,9 @@ def main():
     # 3. ニュースセンチメント特徴量（NEWS_SENTIMENT=true の時のみ）
     df_all = add_news_sentiment(df_all)
 
+    # 4. 市場超過リターンのラベル（全銘柄の翌日リターン中央値を引く）
+    df_all = add_excess_labels(df_all)
+
     df_all = df_all.dropna(subset=["label"])
     df_all.to_sql("features", engine, if_exists="replace", index=False)
     print(f"Saved {len(df_all)} rows to features")
@@ -404,6 +442,10 @@ def main():
     print(f"Label distribution: UP={dist.get(1,0)} ({dist.get(1,0)/total:.1%}), "
           f"DOWN={dist.get(-1,0)} ({dist.get(-1,0)/total:.1%}), "
           f"NEUTRAL={dist.get(0,0)} ({dist.get(0,0)/total:.1%})")
+    dist_x = df_all["label_excess"].value_counts().sort_index()
+    print(f"Excess label distribution: OUTPERFORM={dist_x.get(1,0)} ({dist_x.get(1,0)/total:.1%}), "
+          f"UNDERPERFORM={dist_x.get(-1,0)} ({dist_x.get(-1,0)/total:.1%}), "
+          f"NEUTRAL={dist_x.get(0,0)} ({dist_x.get(0,0)/total:.1%})")
 
 
 if __name__ == "__main__":

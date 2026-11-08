@@ -72,7 +72,7 @@ const STYLE_TABS: StyleConfig[] = [
     proOnly: true,
     defaultMinProb: 65,
     signalFilter: "DOWN",
-    hint: "下落確率の高い銘柄を抽出。信用売り・空売りの参考に",
+    hint: "市場を下回ると予測される銘柄を抽出（相対的な弱さの目安。市場全体が上昇する日は下がらないこともあります）",
   },
 ];
 
@@ -261,6 +261,11 @@ function SignalRow({ s }: { s: Signal }) {
               </span>
             : <span className="text-slate-200 dark:text-slate-700">—</span>
           }
+          {s.excess_return != null && (
+            <div className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+              市場比 {s.excess_return >= 0 ? "+" : ""}{(s.excess_return * 100).toFixed(2)}%
+            </div>
+          )}
         </td>
         <td className="px-4 py-3 text-center text-sm">
           {s.is_correct == null
@@ -335,7 +340,7 @@ function SignalCard({ s, isPro }: { s: Signal; isPro: boolean }) {
         <div className="mb-2.5">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[10px] font-black tracking-[0.1em] uppercase text-slate-400 dark:text-slate-500">
-              {isDown ? "下落確率" : "上昇確率"}
+              {isDown ? "市場劣後確率" : "市場超過確率"}
             </span>
             <span className={`font-mono font-black text-lg leading-none ${
               isDown ? "text-red-500 dark:text-red-400" : "text-teal-600 dark:text-teal-300"
@@ -616,9 +621,9 @@ export default function HomePage() {
                   <th className="text-left">銘柄</th>
                   <th className="text-left">日付</th>
                   <th className="text-center">シグナル</th>
-                  <th className="text-left">{signalFilter === "DOWN" ? "下落確率" : "上昇確率"}</th>
-                  <th className="text-right">実績</th>
-                  <th className="text-center">的中</th>
+                  <th className="text-left">{signalFilter === "DOWN" ? "市場劣後確率" : "市場超過確率"}</th>
+                  <th className="text-right" title="翌営業日の騰落率。的中は市場平均との比較で判定します">騰落</th>
+                  <th className="text-center" title="UP は市場平均を上回ったか、DOWN は下回ったかで判定">的中（対市場）</th>
                   <th className="text-center">解説</th>
                 </tr>
               </thead>

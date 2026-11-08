@@ -26,11 +26,46 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 # 実績リターン記録
 # ─────────────────────────────────────────────
 
+def judge_signal(signal: str, excess_return: float):
+    """
+    シグナルの的中判定。モデルは「市場平均に対する相対的な強弱」を予測しているので、
+    UP は市場を上回ったか、DOWN は市場を下回ったか（超過リターンの符号）で判定する。
+    """
+    if signal == "UP":
+        return bool(excess_return > 0)
+    if signal == "DOWN":
+        return bool(excess_return < 0)
+    return None
+
+
+def calc_next_day_returns(quotes: pd.DataFrame, base_date: date) -> pd.Series:
+    """
+    銘柄ごとの「base_date の終値 → 翌営業日の終値」の騰落率を返す（index=Code）。
+    base_date に終値がない銘柄、翌営業日のデータがない銘柄は含めない。
+    """
+    q = quotes.copy()
+    q["Date"] = pd.to_datetime(q["Date"])
+    base_ts = pd.Timestamp(base_date)
+
+    base = q[q["Date"] == base_ts].set_index("Code")["AdjustmentClose"].astype(float)
+    nxt = (
+        q[q["Date"] > base_ts]
+        .sort_values("Date")
+        .groupby("Code")
+        .first()["AdjustmentClose"]
+        .astype(float)
+    )
+    both = pd.concat([base.rename("base"), nxt.rename("next")], axis=1).dropna()
+    both = both[both["base"] != 0]
+    return (both["next"] - both["base"]) / both["base"]
+
+
 def record_actual_returns(target_date: date, engine) -> int:
     """
     target_date 時点のシグナルに対して、
-    target_date の終値 → target_date+1 営業日の終値 の変化率を計算し
-    actual_return / is_correct を更新する。
+    target_date の終値 → 翌営業日の終値 の変化率（actual_return）と、
+    全銘柄の同期間の騰落率の中央値（market_return）を求め、
+    excess_return = actual_return - market_return を記録して、超過リターンで的中判定する。
 
     Returns:
         更新した行数
@@ -38,7 +73,7 @@ def record_actual_returns(target_date: date, engine) -> int:
     with engine.begin() as conn:
         # target_date に予測されたシグナルで未記録のものを取得
         rows = conn.execute(text("""
-            SELECT p.id, p."Code", p."Date", p.signal
+            SELECT p.id, p."Code", p.signal
             FROM predictions p
             WHERE p."Date" = :target_date
               AND p.actual_return IS NULL
@@ -48,61 +83,47 @@ def record_actual_returns(target_date: date, engine) -> int:
         print(f"[backtest] {target_date}: 未記録シグナルなし")
         return 0
 
-    codes = list({r[1] for r in rows})
-    # target_date と翌営業日の終値を取得（翌日は ±5 日以内で最初のデータ）
+    # 市場平均の算出には「全銘柄」の終値が必要（predictions には UP/DOWN の銘柄しかない）
     with engine.connect() as conn:
         quotes = pd.read_sql(text("""
             SELECT "Code", "Date", "AdjustmentClose"
             FROM daily_quotes
-            WHERE "Code" = ANY(:codes)
-              AND "Date" BETWEEN :d_from AND :d_to
-            ORDER BY "Code", "Date"
+            WHERE "Date" BETWEEN :d_from AND :d_to
         """), conn, params={
-            "codes": codes,
             "d_from": target_date,
             "d_to": target_date + timedelta(days=7),
         })
 
+    returns = calc_next_day_returns(quotes, target_date)
+    if returns.empty:
+        print(f"[backtest] {target_date}: 翌営業日のデータ未取得のためスキップ")
+        return 0
+    market_return = float(returns.median())
+
     updated = 0
     with engine.begin() as conn:
-        for row_id, code, sig_date, signal in rows:
-            code_q = quotes[quotes["Code"] == code].sort_values("Date")
-            # sig_date の終値
-            base = code_q[code_q["Date"] == pd.Timestamp(sig_date)]
-            # sig_date より後の最初の営業日の終値（翌日）
-            next_day = code_q[code_q["Date"] > pd.Timestamp(sig_date)]
-
-            if base.empty or next_day.empty:
+        for row_id, code, signal in rows:
+            if code not in returns.index:
                 continue  # データ未取得なのでスキップ
-
-            close_base = float(base.iloc[0]["AdjustmentClose"])
-            close_next = float(next_day.iloc[0]["AdjustmentClose"])
-
-            if close_base == 0:
-                continue
-
-            actual_return = (close_next - close_base) / close_base
-
-            if signal == "UP":
-                is_correct = actual_return > 0
-            elif signal == "DOWN":
-                is_correct = actual_return < 0
-            else:
-                is_correct = None
-
+            actual_return = float(returns.loc[code])
+            excess_return = actual_return - market_return
             conn.execute(text("""
                 UPDATE predictions
                 SET actual_return = :actual_return,
+                    market_return = :market_return,
+                    excess_return = :excess_return,
                     is_correct    = :is_correct
                 WHERE id = :id
             """), {
                 "actual_return": actual_return,
-                "is_correct": is_correct,
+                "market_return": market_return,
+                "excess_return": excess_return,
+                "is_correct": judge_signal(signal, excess_return),
                 "id": row_id,
             })
             updated += 1
 
-    print(f"[backtest] {target_date}: {updated} 件更新")
+    print(f"[backtest] {target_date}: {updated} 件更新（市場中央値 {market_return:+.3%}）")
     return updated
 
 
@@ -121,7 +142,8 @@ def print_summary(engine):
                     100.0 * SUM(CASE WHEN is_correct THEN 1 END) / NULLIF(COUNT(*), 0),
                     2
                 )                                     AS accuracy_pct,
-                ROUND(AVG(actual_return) * 100, 4)    AS avg_return_pct
+                ROUND(AVG(actual_return) * 100, 4)    AS avg_return_pct,
+                ROUND(AVG(excess_return) * 100, 4)    AS avg_excess_pct
             FROM predictions
             WHERE actual_return IS NOT NULL
             GROUP BY signal

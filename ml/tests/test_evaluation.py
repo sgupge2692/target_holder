@@ -106,3 +106,84 @@ def test_train_full_runs_and_detects_signal(tmp_path, monkeypatch):
     # 信号なし（純ノイズ）: AUC は 0.5 付近に留まる（従来の行順分割だと漏れで上振れしやすい）
     auc_noise = train.train_full(_panel(n_dates=140, n_codes=30, seed=3, signal=0.0))
     assert abs(auc_noise - 0.5) < 0.04
+
+
+# ── 市場超過リターンのラベル ────────────────────────────────────────────
+
+def _excess_panel():
+    """3日 × 5銘柄。日ごとに市場全体が動き、そのうえで銘柄ごとに差がつくデータ"""
+    from pipeline.feature_engineering import add_excess_labels
+    market = {"2024-01-04": -0.02, "2024-01-05": 0.00, "2024-01-09": 0.03}
+    rel = [-0.02, -0.005, 0.0, 0.005, 0.02]       # 銘柄ごとの市場比
+    rows = []
+    for d, m in market.items():
+        for i, r in enumerate(rel):
+            rows.append({"Date": pd.Timestamp(d), "Code": f"{1000 + i}",
+                         "next_return": m + r, "label_threshold": 0.01})
+    return add_excess_labels(pd.DataFrame(rows))
+
+
+def test_excess_label_removes_market_move():
+    df = _excess_panel()
+    # 市場が -2% の日でも、市場より強い銘柄は OUTPERFORM になる（絶対リターンでは負でも）
+    crash = df[df["Date"] == pd.Timestamp("2024-01-04")].set_index("Code")
+    assert crash.loc["1004", "next_return"] == pytest.approx(0.0)       # 絶対リターンは 0%
+    assert crash.loc["1004", "label_excess"] == 1                        # でも市場比では +2%
+    assert crash.loc["1000", "label_excess"] == -1
+    # 日ごとの超過リターンの中央値は 0
+    assert df.groupby("Date")["excess_return"].median().abs().max() < 1e-12
+
+
+def test_excess_label_balanced_regardless_of_market_direction():
+    """市場が大きく上がる日・下がる日でも、UP/DOWN ラベルが偏らない"""
+    df = _excess_panel()
+    for _, g in df.groupby("Date"):
+        assert (g["label_excess"] == 1).sum() == (g["label_excess"] == -1).sum() == 2
+
+
+def test_excess_label_neutral_band():
+    df = _excess_panel()
+    # しきい値 0.01 × 0.3 = 0.003 未満の超過リターンは中立（学習対象外）
+    assert (df.loc[df["excess_return"].abs() < 0.003, "label_excess"] == 0).all()
+    assert (df.loc[df["excess_return"].abs() >= 0.003, "label_excess"] != 0).all()
+
+
+def test_train_prefers_excess_target_and_falls_back(tmp_path, monkeypatch):
+    import pipeline.train as train
+    df = _panel(n_dates=30, n_codes=10)
+    df["label_excess"] = np.where(df["rsi"] > 0, 1, -1)
+    df["excess_return"] = df["rsi"] * 0.01
+    monkeypatch.setattr(train, "FEATURE_COLS", ["rsi", "ma5_deviation"])
+
+    X, y, _, _, meta = train.prepare_data_with_meta(df)
+    assert (y.values == (X["rsi"].values > 0).astype(int)).all()         # label_excess を使っている
+    assert np.allclose(meta["next_return"].values, X["rsi"].values * 0.01)
+
+    X2, y2, _, _, _ = train.prepare_data_with_meta(df.drop(columns=["label_excess", "excess_return"]))
+    assert len(y2) == len(df)                                              # 旧データは label にフォールバック
+
+
+# ── バックテスト: 超過リターンでの的中判定 ───────────────────────────────
+
+def test_backtest_judges_by_excess_return():
+    from pipeline.backtest import judge_signal, calc_next_day_returns
+    assert judge_signal("UP", 0.004) is True
+    assert judge_signal("UP", -0.004) is False
+    assert judge_signal("DOWN", -0.004) is True
+    assert judge_signal("DOWN", 0.004) is False
+    assert judge_signal("NEUTRAL", 0.1) is None
+
+    # 市場が -2% の日: 株価が -1% で済んだ銘柄は UP 的中（超過 +1%）
+    quotes = pd.DataFrame([
+        ("1001", "2024-01-04", 100.0), ("1001", "2024-01-05", 99.0),   # -1%
+        ("1002", "2024-01-04", 100.0), ("1002", "2024-01-05", 98.0),   # -2%
+        ("1003", "2024-01-04", 100.0), ("1003", "2024-01-05", 97.0),   # -3%
+        ("1004", "2024-01-04", 100.0),                                  # 翌日データなし → 除外
+    ], columns=["Code", "Date", "AdjustmentClose"])
+    from datetime import date
+    ret = calc_next_day_returns(quotes, date(2024, 1, 4))
+    assert set(ret.index) == {"1001", "1002", "1003"}
+    market = float(ret.median())
+    assert market == pytest.approx(-0.02)
+    assert judge_signal("UP", ret["1001"] - market) is True
+    assert judge_signal("UP", ret["1003"] - market) is False

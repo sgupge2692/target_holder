@@ -58,7 +58,7 @@ async def get_latest_signals(
     # 無料枠は「最も確度の高い数件」になるので、並び順が体験の質に直結する。
     rows = await db.execute(text(f"""
         SELECT p."Code", p."Date", p.signal, p.up_probability,
-               p.actual_return, p.is_correct,
+               p.actual_return, p.excess_return, p.is_correct,
                p.explanation, p.key_factors,
                s.company_name
         FROM predictions p
@@ -94,7 +94,7 @@ async def get_signal_history(
     limit = 9999 if is_pro else 5  # 無料は直近5件
 
     rows = await db.execute(text("""
-        SELECT "Code", "Date", signal, up_probability, actual_return, is_correct,
+        SELECT "Code", "Date", signal, up_probability, actual_return, excess_return, is_correct,
                explanation, key_factors, predicted_at
         FROM predictions
         WHERE "Code" = :code

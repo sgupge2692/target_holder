@@ -39,6 +39,12 @@ N_SPLITS = 5          # ウォークフォワードの分割数
 EMBARGO_DAYS = 2      # 学習と検証の間を空ける営業日数
 TOP_K = 20            # 「毎日、上位K銘柄」の的中率を測る
 CONFIDENCE = 0.60     # predict.py の CONFIDENCE_THRESHOLD と揃える
+
+# 目的変数: 市場平均に対する超過リターン（feature_engineering.add_excess_labels）。
+# features に無い（旧データ）場合は従来の絶対リターンのラベルにフォールバックする。
+TARGET_COL = "label_excess"
+FALLBACK_TARGET_COL = "label"
+RETURN_COL = "excess_return"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 # ── 特徴量リスト（feature_engineering.py と同期） ────────────────
@@ -127,8 +133,12 @@ def prepare_data_with_meta(df: pd.DataFrame):
     if missing:
         print(f"[WARN] 特徴量 {len(missing)} 件が DB に未存在（スキップ）: {missing[:5]}...")
 
+    target_col = TARGET_COL if TARGET_COL in df.columns else FALLBACK_TARGET_COL
+    return_col = RETURN_COL if target_col == TARGET_COL and RETURN_COL in df.columns else "next_return"
+    print(f"  目的変数: {target_col}（IC は {return_col} で評価）")
+
     X = df[available].replace([np.inf, -np.inf], np.nan).dropna()
-    y = df.loc[X.index, "label"]
+    y = df.loc[X.index, target_col]
 
     mask = y != 0
     X, y = X[mask], y[mask]
@@ -136,7 +146,7 @@ def prepare_data_with_meta(df: pd.DataFrame):
 
     meta = pd.DataFrame({
         "Date": df.loc[X.index, "Date"],
-        "next_return": df.loc[X.index, "next_return"] if "next_return" in df.columns else np.nan,
+        "next_return": df.loc[X.index, return_col] if return_col in df.columns else np.nan,
     })
 
     X = X.reset_index(drop=True)
@@ -344,8 +354,9 @@ def train_incremental(df: pd.DataFrame):
         if os.path.exists(f"{MODEL_DIR}/feature_cols.pkl") else FEATURE_COLS
     available = [c for c in feat_cols if c in recent.columns]
 
+    target_col = TARGET_COL if TARGET_COL in recent.columns else FALLBACK_TARGET_COL
     X = recent[available].replace([np.inf, -np.inf], np.nan).dropna()
-    y = recent.loc[X.index, "label"]
+    y = recent.loc[X.index, target_col]
     mask = y != 0
     X, y = X[mask], y[mask]
     y = (y == 1).astype(int)

@@ -62,6 +62,7 @@ export const getSubscription = () =>
 export interface Signal {
   Code: string; Date: string; signal: "UP" | "DOWN";
   up_probability: number; actual_return: number | null;
+  excess_return?: number | null;  // 市場平均（全銘柄の中央値）に対する超過リターン。的中判定はこちらの符号
   is_correct: boolean | null; company_name: string | null;
   explanation: string | null; key_factors: string | null;
 }
