@@ -128,3 +128,73 @@ async def test_signal_filter_down_sorted_by_strongest_down(client, db_session):
     assert res.status_code == 200
     assert data["total_available"] == 4
     assert [s["up_probability"] for s in data["signals"]] == [0.10, 0.20, 0.30]
+
+
+# ── バックテスト（公開）: 対市場の集計 ───────────────────────────────────
+
+async def _seed_backtest(db_session, days, per_day, excess, top_excess=None):
+    """直近 days 日 × 毎日 per_day 件の UP シグナル。確度の高い順に 0.9, 0.89, ... を付ける"""
+    from datetime import date, timedelta
+    from sqlalchemy import text
+    for i in range(days):
+        d = (date.today() - timedelta(days=days - i)).isoformat()
+        for k in range(per_day):
+            ex = top_excess if (top_excess is not None and k < 3) else excess
+            await db_session.execute(text("""
+                INSERT INTO predictions ("Code","Date",up_probability,signal,actual_return,market_return,excess_return,is_correct)
+                VALUES (:c,:d,:p,'UP',:a,0.0,:e,:ok)
+            """), {"c": f"{1000 + k}", "d": d, "p": 0.9 - k * 0.001, "a": ex, "e": ex, "ok": 1 if ex > 0 else 0})
+    await db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_backtest_cumulative_is_daily_average_not_per_signal_compounding(client, db_session):
+    """
+    1 日 100 件のシグナルがそれぞれ +1% でも、累積は「その日の平均 +1%」を日次で積む。
+    （シグナル 1 件ごとに複利をかけると 1.01^100 のような巨大な数字になる）
+    """
+    await _seed_backtest(db_session, days=5, per_day=100, excess=0.01)
+    res = await client.get("/api/signals/backtest/chart?months=3")
+    data = res.json()
+
+    assert res.status_code == 200
+    last = data["cumulative_return"][-1]
+    assert len(data["cumulative_return"]) == 5
+    assert last["cumulative_return_pct"] == pytest.approx((1.01 ** 5 - 1) * 100, abs=0.01)   # ≒ 5.10%
+    assert last["cumulative_return_pct"] < 10                                                  # 爆発していない
+
+
+@pytest.mark.asyncio
+async def test_backtest_top_k_curve_uses_highest_confidence_signals(client, db_session):
+    from app.routers.signals import BACKTEST_TOP_K
+    # 確度上位3件は +2%、それ以外は -1%
+    await _seed_backtest(db_session, days=4, per_day=50, excess=-0.01, top_excess=0.02)
+    data = (await client.get("/api/signals/backtest/chart?months=3")).json()
+
+    last = data["cumulative_return"][-1]
+    assert BACKTEST_TOP_K == 3
+    assert last["top_cumulative_return_pct"] == pytest.approx((1.02 ** 4 - 1) * 100, abs=0.01)
+    assert last["cumulative_return_pct"] < 0            # 全件平均はマイナス（上位だけが優位）
+    assert data["meta"]["days"] == 4 and data["meta"]["top_k"] == 3
+    assert data["overall"][0]["avg_excess_pct"] == pytest.approx(
+        (3 * 2.0 + 47 * -1.0) / 50, abs=0.01)
+
+
+@pytest.mark.asyncio
+async def test_backtest_chart_excludes_old_data_and_unsettled_signals(client, db_session):
+    from datetime import date, timedelta
+    from sqlalchemy import text
+    await _seed_backtest(db_session, days=3, per_day=5, excess=0.01)
+    # 期間外（2年前）と、実績未確定（actual_return が NULL）の行
+    old = (date.today() - timedelta(days=800)).isoformat()
+    await db_session.execute(text(
+        'INSERT INTO predictions ("Code","Date",up_probability,signal,actual_return,excess_return,is_correct) '
+        "VALUES ('9001', :d, 0.9, 'UP', 0.5, 0.5, 1)"), {"d": old})
+    await db_session.execute(text(
+        'INSERT INTO predictions ("Code","Date",up_probability,signal) VALUES (\'9002\', :d, 0.9, \'UP\')'),
+        {"d": date.today().isoformat()})
+    await db_session.commit()
+
+    data = (await client.get("/api/signals/backtest/chart?months=3")).json()
+    assert len(data["cumulative_return"]) == 3                       # 期間外・未確定は含まない
+    assert data["cumulative_return"][-1]["cumulative_return_pct"] == pytest.approx((1.01 ** 3 - 1) * 100, abs=0.01)

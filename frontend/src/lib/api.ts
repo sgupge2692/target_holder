@@ -82,6 +82,7 @@ export interface Signal {
 export interface AccuracyRow {
   signal: string; total: number; correct: number;
   accuracy_pct: number; avg_return_pct: number;
+  avg_excess_pct?: number;   // 市場平均（全銘柄の中央値）に対する平均超過リターン
 }
 
 export interface LatestSignalsResponse {
@@ -111,11 +112,21 @@ export interface MonthlyAccuracy {
   up_accuracy?: number;   up_total?: number;   up_avg_return?: number;
   down_accuracy?: number; down_total?: number; down_avg_return?: number;
 }
-export interface CumulativeReturn { date: string; cumulative_return_pct: number }
+export interface CumulativeReturn {
+  date: string;
+  cumulative_return_pct: number;       // UPシグナル全件の平均超過リターンを日次で積み上げ
+  top_cumulative_return_pct: number;   // 各日の確度上位N件だけの同様の値
+}
+export interface BacktestMeta {
+  first_date: string | null; last_date: string | null;
+  days: number;   // 集計できた営業日数（実績の長さ）
+  top_k: number;
+}
 export interface BacktestChart {
   monthly: MonthlyAccuracy[];
   cumulative_return: CumulativeReturn[];
   overall: AccuracyRow[];
+  meta?: BacktestMeta;
 }
 
 export const getBacktestChart = (months = 12) =>

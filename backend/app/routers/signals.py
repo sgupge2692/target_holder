@@ -3,12 +3,12 @@
 - GET /api/signals/latest         : 最新シグナル一覧（無料: 確度上位 FREE_SIGNAL_LIMIT 件、Pro: 全件）
 - GET /api/signals/history/{code} : 銘柄別シグナル履歴
 - GET /api/signals/accuracy       : 精度サマリー（全期間）キャッシュ5分
-- GET /api/signals/backtest/chart : 月別精度推移チャートデータ キャッシュ5分
+- GET /api/signals/backtest/chart : バックテスト（月別精度・累積超過リターン）公開・キャッシュ30分
 """
 import csv
 import io
 from typing import Optional
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
@@ -187,9 +187,13 @@ async def get_accuracy(db: AsyncSession = Depends(get_db)):
         GROUP BY signal
         ORDER BY signal
     """))
-    result = {"accuracy": [dict(r._mapping) for r in rows]}
+    result = {"accuracy": [_jsonable(dict(r._mapping)) for r in rows]}
     await cache_set(ck, result, ttl=CACHE_TTL_SHORT)
     return result
+
+
+# 累積リターンの「上位N件」。無料プランの閲覧上限・X 投稿と同じ件数で、実際に見られる銘柄の成績を出す
+BACKTEST_TOP_K = FREE_SIGNAL_LIMIT
 
 
 @router.get("/backtest/chart")
@@ -198,17 +202,30 @@ async def get_backtest_chart(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    月別精度推移データ（認証不要・公開、Redis 30分キャッシュ）
+    バックテスト結果（認証不要・公開、Redis 30分キャッシュ）
+
+    すべて「市場平均（全銘柄の騰落率の中央値）との比較」で集計する。
+    - monthly           : 月別の的中率（is_correct は対市場の判定）
+    - cumulative_return : UP シグナルの累積超過リターン
+        * cumulative_return_pct     : 各日の UP シグナル全件の平均超過リターンを日次で積み上げ
+        * top_cumulative_return_pct : 各日の確度上位 BACKTEST_TOP_K 件だけの同様の値
+      シグナル 1 件ごとに複利をかけると、1 日に数百件あるため意味のない巨大な数字になる。
+      必ず「日ごとに平均 → 日次で積み上げ」にする。
+    - overall           : 全期間の的中率・平均リターン・平均超過リターン
+    - meta              : 集計期間と営業日数（実績の長さを併記するため）
     """
     ck = cache_key("signals", "backtest", str(months))
     cached = await cache_get(ck)
     if cached is not None:
         return cached
 
-    # 月別精度（strftime は PostgreSQL / SQLite 両対応のサブセット）
+    # 日付関数は DB 依存（SQLite の date('now', ...) は PostgreSQL に無い）ので Python 側で計算する
+    cutoff = date.today() - timedelta(days=30 * months)
+
+    # 月別精度。"Date" は PostgreSQL では DATE 型なので TEXT にキャストしてから切り出す
     monthly_rows = await db.execute(text("""
         SELECT
-            substr("Date", 1, 7)                                               AS month,
+            substr(CAST("Date" AS TEXT), 1, 7)                                  AS month,
             signal,
             COUNT(*)                                                            AS total,
             SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)                        AS correct,
@@ -216,42 +233,55 @@ async def get_backtest_chart(
                 100.0 * SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)
                 / NULLIF(COUNT(*), 0), 1
             )                                                                   AS accuracy_pct,
-            ROUND(AVG(actual_return) * 100, 3)                                 AS avg_return_pct
+            ROUND(AVG(actual_return) * 100, 3)                                 AS avg_return_pct,
+            ROUND(AVG(excess_return) * 100, 3)                                 AS avg_excess_pct
         FROM predictions
         WHERE actual_return IS NOT NULL
-          AND "Date" >= date('now', '-' || :months || ' months')
-        GROUP BY substr("Date", 1, 7), signal
+          AND "Date" >= :cutoff
+        GROUP BY substr(CAST("Date" AS TEXT), 1, 7), signal
         ORDER BY month ASC, signal
-    """), {"months": months})
+    """), {"cutoff": cutoff})
 
     monthly_data: dict = {}
     for r in monthly_rows:
         m = r.month
         if m not in monthly_data:
             monthly_data[m] = {"month": m}
-        monthly_data[m][f"{r.signal.lower()}_accuracy"] = float(r.accuracy_pct or 0)
-        monthly_data[m][f"{r.signal.lower()}_total"]    = int(r.total)
-        monthly_data[m][f"{r.signal.lower()}_avg_return"] = float(r.avg_return_pct or 0)
+        key = r.signal.lower()
+        monthly_data[m][f"{key}_accuracy"] = float(r.accuracy_pct or 0)
+        monthly_data[m][f"{key}_total"] = int(r.total)
+        monthly_data[m][f"{key}_avg_return"] = float(r.avg_return_pct or 0)
+        monthly_data[m][f"{key}_avg_excess"] = float(r.avg_excess_pct or 0)
 
-    # 累積リターン
-    cumulative_rows = await db.execute(text("""
+    # 累積超過リターン: 日ごとに平均してから積み上げる（全件 / 確度上位 K 件）
+    daily_rows = await db.execute(text("""
         SELECT
             "Date",
-            ROUND(actual_return * 100, 3) AS daily_return_pct
-        FROM predictions
-        WHERE signal = 'UP'
-          AND actual_return IS NOT NULL
-          AND "Date" >= date('now', '-' || :months || ' months')
+            AVG(excess_return)                                  AS avg_all,
+            AVG(CASE WHEN rk <= :k THEN excess_return END)      AS avg_top
+        FROM (
+            SELECT "Date", excess_return,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY "Date" ORDER BY up_probability DESC
+                   ) AS rk
+            FROM predictions
+            WHERE signal = 'UP'
+              AND excess_return IS NOT NULL
+              AND "Date" >= :cutoff
+        ) t
+        GROUP BY "Date"
         ORDER BY "Date" ASC
-    """), {"months": months})
+    """), {"cutoff": cutoff, "k": BACKTEST_TOP_K})
 
     cumulative = []
-    cum = 1.0
-    for r in cumulative_rows:
-        cum *= (1 + float(r.daily_return_pct or 0) / 100)
+    cum_all, cum_top = 1.0, 1.0
+    for r in daily_rows:
+        cum_all *= 1 + float(r.avg_all or 0)
+        cum_top *= 1 + float(r.avg_top or 0)
         cumulative.append({
-            "date": str(r.Date),
-            "cumulative_return_pct": round((cum - 1) * 100, 2),
+            "date": str(r.Date)[:10],
+            "cumulative_return_pct": round((cum_all - 1) * 100, 2),
+            "top_cumulative_return_pct": round((cum_top - 1) * 100, 2),
         })
 
     # 全期間サマリー
@@ -264,17 +294,36 @@ async def get_backtest_chart(
                 100.0 * SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)
                 / NULLIF(COUNT(*), 0), 1
             )                                                                   AS accuracy_pct,
-            ROUND(AVG(actual_return) * 100, 3)                                 AS avg_return_pct
+            ROUND(AVG(actual_return) * 100, 3)                                 AS avg_return_pct,
+            ROUND(AVG(excess_return) * 100, 3)                                 AS avg_excess_pct
         FROM predictions
         WHERE actual_return IS NOT NULL
         GROUP BY signal
         ORDER BY signal
     """))
 
+    meta_row = (await db.execute(text("""
+        SELECT MIN("Date") AS first_date, MAX("Date") AS last_date, COUNT(DISTINCT "Date") AS days
+        FROM predictions
+        WHERE actual_return IS NOT NULL
+    """))).first()
+
     result = {
         "monthly": sorted(monthly_data.values(), key=lambda x: x["month"]),
         "cumulative_return": cumulative,
-        "overall": [dict(r._mapping) for r in overall_rows],
+        "overall": [_jsonable(dict(r._mapping)) for r in overall_rows],
+        "meta": {
+            "first_date": str(meta_row.first_date)[:10] if meta_row and meta_row.first_date else None,
+            "last_date": str(meta_row.last_date)[:10] if meta_row and meta_row.last_date else None,
+            "days": int(meta_row.days) if meta_row and meta_row.days else 0,
+            "top_k": BACKTEST_TOP_K,
+        },
     }
     await cache_set(ck, result, ttl=CACHE_TTL_LONG)
     return result
+
+
+def _jsonable(row: dict) -> dict:
+    """PostgreSQL の NUMERIC は Decimal で返るので、JSON/キャッシュで扱える float / int にそろえる"""
+    from decimal import Decimal
+    return {k: (float(v) if isinstance(v, Decimal) else v) for k, v in row.items()}
