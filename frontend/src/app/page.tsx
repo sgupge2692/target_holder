@@ -333,7 +333,14 @@ function SignalCard({ s, isPro }: { s: Signal; isPro: boolean }) {
             </p>
             <p className="ticker mt-0.5">{s.Code} · {s.Date}</p>
           </div>
-          <SignalBadge signal={s.signal} />
+          <div className="flex flex-col items-end gap-1">
+            <SignalBadge signal={s.signal} />
+            {s.signal_changed && (
+              <span className="rounded bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-amber-700 dark:text-amber-300">
+                転換{s.prev_signal ? `（前回 ${s.prev_signal === "UP" ? "強" : s.prev_signal === "DOWN" ? "弱" : "中立"}）` : ""}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* 確率バー */}
@@ -346,11 +353,19 @@ function SignalCard({ s, isPro }: { s: Signal; isPro: boolean }) {
               isDown ? "text-red-500 dark:text-red-400" : "text-teal-600 dark:text-teal-300"
             }`}>
               {conf}%
+              {s.prob_change_pt != null && Math.abs(s.prob_change_pt) >= 0.1 && (
+                <span
+                  className="ml-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400"
+                  title="前回の予測からの上昇確率の変化"
+                >
+                  {s.prob_change_pt > 0 ? "▲" : "▼"}{Math.abs(s.prob_change_pt).toFixed(1)}pt
+                </span>
+              )}
             </span>
           </div>
           <div className="prob-bar-track h-[3px]">
             <div
-              className={`prob-bar-fill h-[3px] ${isDown ? "bg-red-500" : conf >= 80 ? "bg-teal-500" : conf >= 70 ? "bg-teal-400" : "bg-amber-400"}`}
+              className={`prob-bar-fill h-[3px] ${isDown ? "bg-red-500" : conf >= 60 ? "bg-teal-500" : conf >= 55 ? "bg-teal-400" : "bg-amber-400"}`}
               style={{ width: `${conf}%` }}
             />
           </div>

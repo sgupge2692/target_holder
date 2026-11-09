@@ -30,8 +30,9 @@ RAW_SCHEMA = """
 CREATE TABLE listed_stocks (
     code VARCHAR(10) PRIMARY KEY,
     company_name VARCHAR(200),
-    sector VARCHAR(100),
-    market VARCHAR(50)
+    market_code VARCHAR(10),
+    sector_code VARCHAR(10),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 CREATE TABLE predictions (
     id SERIAL PRIMARY KEY,
@@ -178,3 +179,37 @@ async def test_history_runs_on_postgres(pg_client):
     res = await pg_client.get("/api/signals/history/1000", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
     assert len(res.json()["history"]) >= 1
+
+
+async def test_sectors_runs_on_postgres(pg_client):
+    """業種別ヒートマップが PostgreSQL で動く（sector_code は init.sql の実スキーマ）"""
+    async with pg_client.session_factory() as s:
+        for code, sector in [("1001", "3650"), ("1002", "3650"), ("1003", "3650"), ("2001", "7050")]:
+            await s.execute(text("INSERT INTO listed_stocks (code, company_name, sector_code) VALUES (:c,:n,:s)"),
+                            {"c": code, "n": f"銘柄{code}", "s": sector})
+        for code, prob, sig in [("1001", 0.6, "UP"), ("1002", 0.55, "UP"), ("1003", 0.5, "NEUTRAL"), ("2001", 0.4, "DOWN")]:
+            await s.execute(text('INSERT INTO predictions ("Code","Date",up_probability,signal) VALUES (:c,:d,:p,:g)'),
+                            {"c": code, "d": date.today(), "p": prob, "g": sig})
+        await s.commit()
+
+    res = await pg_client.get("/api/signals/sectors")
+    assert res.status_code == 200
+    data = res.json()
+    assert [x["sector_name"] for x in data["sectors"]] == ["電気機器"]     # 銀行業は1銘柄なので除外
+    assert isinstance(data["sectors"][0]["avg_up_probability"], float)
+    assert data["date"] == date.today().isoformat()
+
+
+async def test_latest_change_from_previous_runs_on_postgres(pg_client):
+    """前回予測との差（相関サブクエリ）が PostgreSQL で動き、値が数値で返る"""
+    await _seed(pg_client, days=3, per_day=4)
+    token = await _register(pg_client, "chg-pg@example.com")
+    # 無料プランは確度上位3件だけ見えるので、DOWN で絞って 1000 を確実に含める
+    res = await pg_client.get("/api/signals/latest?signal=DOWN", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    s = {x["Code"]: x for x in res.json()["signals"]}["1000"]
+    # 最新は DOWN(0.2)、前日は UP(0.9)
+    assert s["signal"] == "DOWN" and s["prev_signal"] == "UP"
+    assert s["signal_changed"] is True
+    assert s["prob_change_pt"] == pytest.approx(-70.0, abs=0.1)
+    assert isinstance(s["prob_change_pt"], float)

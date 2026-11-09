@@ -242,3 +242,30 @@ async def test_sectors_aggregates_and_filters_small_sectors(client, db_session):
     assert top["stock_count"] == 3 and top["up_count"] == 2 and top["down_count"] == 0
     assert abs(top["avg_up_probability"] - 0.56) < 1e-3
     assert bottom["down_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_latest_includes_change_from_previous_prediction(client, db_session):
+    """前回予測との差（確率の変化pt・シグナル転換）が付く。前回が無い銘柄は None"""
+    from sqlalchemy import text
+
+    async def add(code, date, prob, sig):
+        await db_session.execute(
+            text('INSERT INTO predictions ("Code","Date",up_probability,signal) VALUES (:c,:d,:p,:g)'),
+            {"c": code, "d": date, "p": prob, "g": sig},
+        )
+
+    await add("1001", "2026-11-05", 0.40, "DOWN")
+    await add("1001", "2026-11-06", 0.62, "UP")       # 前回から +22pt、DOWN → UP に転換
+    await add("2002", "2026-11-06", 0.58, "UP")       # 前回なし
+    await db_session.commit()
+
+    token = await _get_token(client, email="chg@example.com")
+    res = await client.get("/api/signals/latest", headers={"Authorization": f"Bearer {token}"})
+    by_code = {s["Code"]: s for s in res.json()["signals"]}
+
+    a = by_code["1001"]
+    assert a["prob_change_pt"] == 22.0
+    assert a["signal_changed"] is True and a["prev_signal"] == "DOWN"
+    b = by_code["2002"]
+    assert b["prob_change_pt"] is None and b["signal_changed"] is None

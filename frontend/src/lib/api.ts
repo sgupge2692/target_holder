@@ -78,6 +78,9 @@ export interface Signal {
   excess_return?: number | null;  // 市場平均（全銘柄の中央値）に対する超過リターン。的中判定はこちらの符号
   is_correct: boolean | null; company_name: string | null;
   explanation: string | null; key_factors: string | null;
+  prob_change_pt?: number | null;      // 前回予測からの上昇確率の変化（pt）。前回が無ければ null
+  prev_signal?: string | null;         // 前回のシグナル
+  signal_changed?: boolean | null;     // 前回からシグナルが変わったか
 }
 export interface AccuracyRow {
   signal: string; total: number; correct: number;

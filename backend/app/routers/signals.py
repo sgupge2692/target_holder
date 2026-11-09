@@ -42,6 +42,22 @@ SECTOR_NAMES = {
 MIN_STOCKS_PER_SECTOR = 3   # 銘柄数が少ない業種は平均がぶれるので除外
 
 
+def _add_change(row: dict) -> dict:
+    """
+    前回の予測との差を付ける。
+    - prob_change_pt : 上昇確率の変化（パーセントポイント）。前回が無ければ None
+    - signal_changed : 前回からシグナルが変わったか（UP⇄DOWN など）。前回が無ければ None
+    """
+    prev_prob = row.get("prev_up_probability")
+    prev_signal = row.get("prev_signal")
+    row["prob_change_pt"] = (
+        round((float(row["up_probability"]) - float(prev_prob)) * 100, 1)
+        if prev_prob is not None else None
+    )
+    row["signal_changed"] = (prev_signal != row["signal"]) if prev_signal else None
+    return row
+
+
 @router.get("/latest")
 async def get_latest_signals(
     signal: Optional[str] = Query(None, regex="^(UP|DOWN)$"),
@@ -75,7 +91,13 @@ async def get_latest_signals(
         SELECT p."Code", p."Date", p.signal, p.up_probability,
                p.actual_return, p.excess_return, p.is_correct,
                p.explanation, p.key_factors,
-               s.company_name
+               s.company_name,
+               (SELECT p2.up_probability FROM predictions p2
+                 WHERE p2."Code" = p."Code" AND p2."Date" < p."Date"
+                 ORDER BY p2."Date" DESC LIMIT 1) AS prev_up_probability,
+               (SELECT p2.signal FROM predictions p2
+                 WHERE p2."Code" = p."Code" AND p2."Date" < p."Date"
+                 ORDER BY p2."Date" DESC LIMIT 1) AS prev_signal
         FROM predictions p
         LEFT JOIN listed_stocks s ON s.code = p."Code"
         WHERE p.id IN (
@@ -88,7 +110,7 @@ async def get_latest_signals(
         LIMIT :limit
     """), {**params, "limit": limit})
 
-    result = [dict(r._mapping) for r in rows]
+    result = [_add_change(dict(r._mapping)) for r in rows]
     return {
         "signals": result,
         "plan": current_user.plan,
