@@ -48,6 +48,13 @@ CREATE TABLE predictions (
     explanation TEXT,
     key_factors TEXT
 );
+CREATE TABLE daily_quotes (
+    id SERIAL PRIMARY KEY,
+    "Code" VARCHAR(10) NOT NULL,
+    "Date" DATE NOT NULL,
+    "Close" NUMERIC,
+    "AdjustmentClose" NUMERIC
+);
 """
 
 
@@ -213,3 +220,20 @@ async def test_latest_change_from_previous_runs_on_postgres(pg_client):
     assert s["signal_changed"] is True
     assert s["prob_change_pt"] == pytest.approx(-70.0, abs=0.1)
     assert isinstance(s["prob_change_pt"], float)
+
+
+async def test_watchlist_change_runs_on_postgres(pg_client):
+    """ウォッチリストの前回比（相関サブクエリ）が PostgreSQL で動き、数値で返る"""
+    token = await _register(pg_client, "wl-pg@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    await pg_client.post("/api/watchlist/7203", headers=headers)
+    async with pg_client.session_factory() as s:
+        for d, p, sg in [(date.today() - timedelta(days=1), 0.45, "NEUTRAL"), (date.today(), 0.61, "UP")]:
+            await s.execute(text('INSERT INTO predictions ("Code","Date",up_probability,signal) VALUES (\'7203\',:d,:p,:g)'),
+                            {"d": d, "p": p, "g": sg})
+        await s.commit()
+    res = await pg_client.get("/api/watchlist", headers=headers)
+    assert res.status_code == 200
+    item = res.json()["watchlist"][0]
+    assert item["prev_signal"] == "NEUTRAL" and item["signal_changed"] is True
+    assert item["prob_change_pt"] == pytest.approx(16.0, abs=0.1) and isinstance(item["prob_change_pt"], float)

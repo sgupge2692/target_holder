@@ -219,6 +219,9 @@ export interface WatchlistItem {
   signal: "UP" | "DOWN" | null; up_probability: number | null;
   is_correct: boolean | null; signal_date: string | null;
   latest_price: number | null;
+  prev_signal?: string | null;         // 前回のシグナル
+  prob_change_pt?: number | null;      // 前回予測からの上昇確率の変化（pt）
+  signal_changed?: boolean | null;     // 前回からシグナルが変わったか
 }
 
 export const getWatchlist = () =>

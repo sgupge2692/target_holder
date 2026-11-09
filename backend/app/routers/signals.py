@@ -50,11 +50,12 @@ def _add_change(row: dict) -> dict:
     """
     prev_prob = row.get("prev_up_probability")
     prev_signal = row.get("prev_signal")
+    cur_prob = row.get("up_probability")
     row["prob_change_pt"] = (
-        round((float(row["up_probability"]) - float(prev_prob)) * 100, 1)
-        if prev_prob is not None else None
+        round((float(cur_prob) - float(prev_prob)) * 100, 1)
+        if prev_prob is not None and cur_prob is not None else None
     )
-    row["signal_changed"] = (prev_signal != row["signal"]) if prev_signal else None
+    row["signal_changed"] = (prev_signal != row["signal"]) if prev_signal and row.get("signal") else None
     return row
 
 
