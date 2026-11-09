@@ -78,7 +78,9 @@ services:
       - .env
     environment:
       ENV: production
-      NEWS_SENTIMENT: "${NEWS_SENTIMENT:-false}"
+      NEWS_FEATURES: "${NEWS_FEATURES:-auto}"        # auto: 蓄積が NEWS_MIN_DAYS 日以上なら学習に使う / on / off
+      NEWS_MIN_DAYS: "${NEWS_MIN_DAYS:-90}"
+      NEWS_MAX_STOCKS: "${NEWS_MAX_STOCKS:-300}"
       NEWS_USE_LLM: "${NEWS_USE_LLM:-false}"
     deploy:
       resources:

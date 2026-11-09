@@ -141,6 +141,13 @@ def test_03_train_ensemble_saves_models(world):
     for name in ["lgbm_model.pkl", "xgb_model.pkl", "scaler.pkl", "feature_cols.pkl", "ensemble_weights.pkl", "calibrator.pkl"]:
         assert (models / name).exists(), f"{name} が保存されていません\n{out[-2000:]}"
 
+    # 合成データの精度は意味を持たないが、「リークで高すぎる」「壊れて低すぎる」は検出できる。
+    # （旧 CV はノイズだけのデータで AUC 0.88 を出していた）
+    import joblib
+    metrics = joblib.load(models / "metrics.pkl")
+    assert 0.45 <= metrics["ensemble_auc"] <= 0.62, f"ensemble AUC が範囲外: {metrics}"
+    assert metrics["ece_calibrated"] <= metrics["ece_raw"] + 0.01, f"校正で悪化している: {metrics}"
+
 
 def test_04_predict_saves_signals_for_latest_day(world):
     out = _run("predict.py", [], world["env"])

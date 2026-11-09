@@ -18,6 +18,12 @@ jobs:
       - name: データ取得
         run: docker compose exec -T ml python pipeline/fetch_data.py
 
+      # ニュースは毎営業日、予測の前（18:00 JST より前）に蓄積する。記事が使えるようになった時刻 = 収集時刻。
+      # 失敗しても日次パイプライン全体は止めない（ニュース特徴量は蓄積が溜まるまで学習に使われない）。
+      - name: ニュース収集
+        continue-on-error: true
+        run: docker compose exec -T ml python pipeline/collect_news.py
+
       - name: 特徴量計算
         run: docker compose exec -T ml python pipeline/feature_engineering.py
 

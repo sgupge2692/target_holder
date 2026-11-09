@@ -30,10 +30,12 @@ try:
     from pipeline.evaluation import (
         walk_forward_splits, split_for_early_stopping, evaluate_predictions, calibration_report,
     )
+    from pipeline.news_store import NEWS_FEATURE_COLS, COVERED_COL, covered_days
 except ImportError:  # python pipeline/train.py で直接実行する場合
     from evaluation import (
         walk_forward_splits, split_for_early_stopping, evaluate_predictions, calibration_report,
     )
+    from news_store import NEWS_FEATURE_COLS, COVERED_COL, covered_days
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 MODEL_DIR = os.getenv("MODEL_DIR", "/app/models")
@@ -72,8 +74,7 @@ FEATURE_COLS = [
     # v3 追加: セクター・市場相対
     "market_relative_return", "market_relative_rsi",
     "sector_relative_return", "sector_relative_rsi", "sector_relative_ma5",
-    # v4 追加: ニュースセンチメント（NEWS_SENTIMENT=true 時のみ有効）
-    "news_sentiment", "news_pos_count", "news_neg_count", "news_article_count",
+    # ニュース特徴量（NEWS_FEATURE_COLS）は、蓄積期間が足りるときだけ resolve_feature_cols が追加する
     # v5 追加: ギャップ・出来高急増・ボラティリティ・価格位置・ストリーク
     "gap_up", "gap_down", "gap",
     "volume_spike", "volume_spike_ratio",
@@ -122,6 +123,43 @@ def load_features(engine) -> pd.DataFrame:
     return pd.read_sql('SELECT * FROM features ORDER BY "Date", "Code"', engine)
 
 
+# ニュース特徴量を学習に使うか: auto（蓄積が NEWS_MIN_DAYS 日以上なら使う）/ on / off
+NEWS_FEATURES = os.getenv("NEWS_FEATURES", "auto").lower()
+NEWS_MIN_DAYS = int(os.getenv("NEWS_MIN_DAYS", "90"))
+
+
+def resolve_feature_cols(df: pd.DataFrame, mode: str | None = None, min_days: int | None = None):
+    """
+    学習に使う特徴量と、使う行を決める。
+
+    ニュースは蓄積を始めた日以降にしか存在しない。蓄積が短いまま使うと、
+    「ニュースが 0 の古い期間」と「ニュースがある新しい期間」が混ざって、見かけの精度が歪む。
+    そこで、蓄積が min_days 日以上あるときだけニュース特徴量を使い、
+    その場合はニュースを観測できていた日（news_covered=1）の行だけで学習する。
+
+    Returns: (feature_cols, df（必要なら行を絞ったもの）, 理由の文字列)
+    """
+    mode = (mode or NEWS_FEATURES).lower()
+    min_days = NEWS_MIN_DAYS if min_days is None else min_days
+    base = list(FEATURE_COLS)
+    has_cols = all(c in df.columns for c in NEWS_FEATURE_COLS) and COVERED_COL in df.columns
+    days = covered_days(df) if has_cols else 0
+
+    if mode == "off":
+        return base, df, "ニュース特徴量: 使わない（NEWS_FEATURES=off）"
+    if not has_cols:
+        return base, df, "ニュース特徴量: 使わない（features にニュース列が無い）"
+    if mode == "auto" and days < min_days:
+        return base, df, f"ニュース特徴量: 使わない（蓄積 {days} 日 < {min_days} 日。collect_news.py を毎日回して蓄積する）"
+    if days == 0:
+        return base, df, "ニュース特徴量: 使わない（観測できた日が 0 日）"
+    covered = df[df[COVERED_COL] == 1]
+    return (
+        base + list(NEWS_FEATURE_COLS), covered,
+        f"ニュース特徴量: 使う（観測できた {days} 日・{len(covered)} 行のみで学習。それ以前の行は使わない）",
+    )
+
+
 def prepare_data_with_meta(df: pd.DataFrame):
     """
     学習用データを作る。日付順に並べ替え、評価に必要な日付・翌日リターンも返す。
@@ -130,10 +168,12 @@ def prepare_data_with_meta(df: pd.DataFrame):
         X, y, scale_pos_weight, feature_cols, meta(DataFrame: Date, next_return)
         いずれも行の並びは同一（日付 → 銘柄コード順、index は 0..n-1）
     """
+    wanted, df, news_msg = resolve_feature_cols(df)
+    print(f"  {news_msg}")
     df = df.sort_values(["Date", "Code"]).reset_index(drop=True)
 
-    available = [c for c in FEATURE_COLS if c in df.columns]
-    missing   = [c for c in FEATURE_COLS if c not in df.columns]
+    available = [c for c in wanted if c in df.columns]
+    missing   = [c for c in wanted if c not in df.columns]
     if missing:
         print(f"[WARN] 特徴量 {len(missing)} 件が DB に未存在（スキップ）: {missing[:5]}...")
 

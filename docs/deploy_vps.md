@@ -164,6 +164,21 @@ docker compose exec cron python /scripts/send_daily_signals.py
 
 ---
 
+## 9.5 ニュースの蓄積
+
+```bash
+# 毎営業日、予測の前（18:00 JST より前）に実行（daily_pipeline.yml に組み込み済み）
+docker compose exec -T ml python pipeline/collect_news.py --dry-run   # 初回は保存せず件数だけ確認
+docker compose exec -T ml python pipeline/collect_news.py
+
+# 蓄積が 90 日たまったら、ニュースを足して本当に良くなるか確認する
+docker compose exec -T ml python pipeline/news_ablation.py
+```
+
+蓄積が NEWS_MIN_DAYS（既定 90）日未満のあいだ、学習は自動でニュース特徴量を使いません。
+
+---
+
 ## 10. よくあるトラブル
 
 ### DB 接続エラー

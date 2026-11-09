@@ -79,10 +79,13 @@ FEATURE_LABELS = {
     "sector_relative_rsi":    "セクター相対RSI",
     "sector_relative_ma5":    "セクター相対MA5",
     # v4 ニュースセンチメント
-    "news_sentiment":         "ニュースセンチメント",
+    "news_sentiment":         "ニュースセンチメント（3日）",
+    "news_sent_1d":           "ニュースセンチメント（1日）",
     "news_pos_count":         "ポジニュース件数",
     "news_neg_count":         "ネガニュース件数",
-    "news_article_count":     "ニュース取得件数",
+    "news_article_count":     "ニュース件数（3日）",
+    "news_count_1d":          "ニュース件数（1日）",
+    "news_urgency":           "速報ワード含有率",
     # v5 ギャップ・ボラ・価格位置
     "gap_up":                 "ギャップアップ率",
     "gap_down":               "ギャップダウン率",
