@@ -32,6 +32,7 @@ async def test_engine():
                 code TEXT PRIMARY KEY,
                 company_name TEXT,
                 sector TEXT,
+                sector_code TEXT,
                 market TEXT
             )
         """))

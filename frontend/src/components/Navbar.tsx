@@ -91,6 +91,7 @@ export function Navbar() {
             {user ? (
               <>
                 <NavLink href="/">シグナル</NavLink>
+                <NavLink href="/sectors">業種別</NavLink>
                 <NavLink href="/backtest">バックテスト</NavLink>
                 <NavLink href="/watchlist">
                   <span className="flex items-center gap-1.5"><Bookmark size={12} />ウォッチ</span>
@@ -211,6 +212,7 @@ export function Navbar() {
           {user ? (
             <>
               <DrawerLink href="/" icon={<BarChart2 size={15} />} label="シグナル" onClick={closeDrawer} />
+              <DrawerLink href="/sectors" icon={<BarChart2 size={15} />} label="業種別" onClick={closeDrawer} />
               <DrawerLink href="/backtest" icon={<BarChart2 size={15} />} label="バックテスト" onClick={closeDrawer} />
               <DrawerLink href="/paper" icon={<FlaskConical size={15} />} label="模擬売買" onClick={closeDrawer} />
               <DrawerLink href="/watchlist" icon={<Bookmark size={15} />} label="ウォッチリスト" onClick={closeDrawer} />

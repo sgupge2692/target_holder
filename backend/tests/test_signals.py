@@ -198,3 +198,47 @@ async def test_backtest_chart_excludes_old_data_and_unsettled_signals(client, db
     data = (await client.get("/api/signals/backtest/chart?months=3")).json()
     assert len(data["cumulative_return"]) == 3                       # 期間外・未確定は含まない
     assert data["cumulative_return"][-1]["cumulative_return_pct"] == pytest.approx((1.01 ** 3 - 1) * 100, abs=0.01)
+
+
+@pytest.mark.asyncio
+async def test_sectors_public_and_empty(client):
+    """sectors は認証不要。データが無くても空配列を返す"""
+    res = await client.get("/api/signals/sectors")
+    assert res.status_code == 200
+    assert res.json()["sectors"] == []
+
+
+@pytest.mark.asyncio
+async def test_sectors_aggregates_and_filters_small_sectors(client, db_session):
+    """業種ごとに平均確率・UP/DOWN件数を集計し、銘柄数が少ない業種は除く。強い順に並ぶ"""
+    from sqlalchemy import text
+
+    def stock(code, sector):
+        return text("INSERT INTO listed_stocks (code, company_name, sector_code) VALUES (:c, :n, :s)"), \
+            {"c": code, "n": f"銘柄{code}", "s": sector}
+
+    def pred(code, prob, sig):
+        return text('INSERT INTO predictions ("Code","Date",up_probability,signal) VALUES (:c,\'2026-11-06\',:p,:g)'), \
+            {"c": code, "p": prob, "g": sig}
+
+    rows = [
+        stock("1001", "3650"), stock("1002", "3650"), stock("1003", "3650"),   # 電気機器: 強い
+        stock("2001", "7050"), stock("2002", "7050"), stock("2003", "7050"),   # 銀行業: 弱い
+        stock("3001", "3250"), stock("3002", "3250"),                          # 医薬品: 2件なので除外
+        pred("1001", 0.60, "UP"), pred("1002", 0.56, "UP"), pred("1003", 0.52, "NEUTRAL"),
+        pred("2001", 0.40, "DOWN"), pred("2002", 0.45, "NEUTRAL"), pred("2003", 0.47, "NEUTRAL"),
+        pred("3001", 0.70, "UP"), pred("3002", 0.70, "UP"),
+    ]
+    for stmt, params in rows:
+        await db_session.execute(stmt, params)
+    await db_session.commit()
+
+    res = await client.get("/api/signals/sectors")
+    data = res.json()
+    assert data["date"] == "2026-11-06"
+    names = [s["sector_name"] for s in data["sectors"]]
+    assert names == ["電気機器", "銀行業"]                 # 強い順、医薬品は除外
+    top, bottom = data["sectors"]
+    assert top["stock_count"] == 3 and top["up_count"] == 2 and top["down_count"] == 0
+    assert abs(top["avg_up_probability"] - 0.56) < 1e-3
+    assert bottom["down_count"] == 1

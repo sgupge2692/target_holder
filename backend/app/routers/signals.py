@@ -4,6 +4,7 @@
 - GET /api/signals/history/{code} : 銘柄別シグナル履歴
 - GET /api/signals/accuracy       : 精度サマリー（全期間）キャッシュ5分
 - GET /api/signals/backtest/chart : バックテスト（月別精度・累積超過リターン）公開・キャッシュ30分
+- GET /api/signals/sectors        : 業種（東証33業種）別の強弱ヒートマップ。公開・キャッシュ5分
 """
 import csv
 import io
@@ -25,6 +26,20 @@ router = APIRouter(prefix="/api/signals", tags=["signals"])
 FREE_SIGNAL_LIMIT = 3   # 無料プランで見られるシグナル数（課金動機の中核。変更はここだけ）
 CACHE_TTL_SHORT = 300   # 5分
 CACHE_TTL_LONG = 1800   # 30分（バックテスト等）
+
+# 東証33業種コード → 業種名（listed_stocks.sector_code）
+SECTOR_NAMES = {
+    "0050": "水産・農林業", "1050": "鉱業", "2050": "建設業", "3050": "食料品",
+    "3100": "繊維製品", "3150": "パルプ・紙", "3200": "化学", "3250": "医薬品",
+    "3300": "石油・石炭製品", "3350": "ゴム製品", "3400": "ガラス・土石製品",
+    "3450": "鉄鋼", "3500": "非鉄金属", "3550": "金属製品", "3600": "機械",
+    "3650": "電気機器", "3700": "輸送用機器", "3750": "精密機器", "3800": "その他製品",
+    "4050": "電気・ガス業", "5050": "陸運業", "5100": "海運業", "5150": "空運業",
+    "5200": "倉庫・運輸関連業", "5250": "情報・通信業", "6050": "卸売業", "6100": "小売業",
+    "7050": "銀行業", "7100": "証券・商品先物取引業", "7150": "保険業",
+    "7200": "その他金融業", "8050": "不動産業", "9050": "サービス業",
+}
+MIN_STOCKS_PER_SECTOR = 3   # 銘柄数が少ない業種は平均がぶれるので除外
 
 
 @router.get("/latest")
@@ -327,3 +342,56 @@ def _jsonable(row: dict) -> dict:
     """PostgreSQL の NUMERIC は Decimal で返るので、JSON/キャッシュで扱える float / int にそろえる"""
     from decimal import Decimal
     return {k: (float(v) if isinstance(v, Decimal) else v) for k, v in row.items()}
+
+
+@router.get("/sectors")
+async def get_sector_heatmap(db: AsyncSession = Depends(get_db)):
+    """
+    業種別の強弱（最新シグナルの集計）。公開エンドポイント。
+
+    個別銘柄は返さず、業種ごとの「市場平均を上回る確率の平均」と UP / DOWN 件数だけを返す。
+    どの業種が強いかを無料で見せ、個別銘柄は有料で見る導線にする。
+    """
+    key = cache_key("signals:sectors")
+    cached = await cache_get(key)
+    if cached is not None:
+        return cached
+
+    rows = await db.execute(text("""
+        SELECT p."Date", p."Code", p.signal, p.up_probability, s.sector_code
+        FROM predictions p
+        LEFT JOIN listed_stocks s ON s.code = p."Code"
+        WHERE p.id IN (SELECT MAX(id) FROM predictions GROUP BY "Code")
+    """))
+    records = [dict(r._mapping) for r in rows]
+
+    groups: dict[str, list[dict]] = {}
+    for r in records:
+        code = (r.get("sector_code") or "").strip()
+        if code:
+            groups.setdefault(code, []).append(r)
+
+    sectors = []
+    for code, items in groups.items():
+        if len(items) < MIN_STOCKS_PER_SECTOR:
+            continue
+        probs = [float(i["up_probability"]) for i in items]
+        sectors.append({
+            "sector_code": code,
+            "sector_name": SECTOR_NAMES.get(code, code),
+            "stock_count": len(items),
+            "avg_up_probability": round(sum(probs) / len(probs), 4),
+            "up_count": sum(1 for i in items if i["signal"] == "UP"),
+            "down_count": sum(1 for i in items if i["signal"] == "DOWN"),
+        })
+    sectors.sort(key=lambda x: x["avg_up_probability"], reverse=True)
+
+    dates = [str(r["Date"])[:10] for r in records if r.get("Date") is not None]
+    result = _jsonable({
+        "date": max(dates) if dates else None,
+        "sectors": sectors,
+        "min_stocks": MIN_STOCKS_PER_SECTOR,
+    })
+    await cache_set(key, result, CACHE_TTL_SHORT)
+    return result
+

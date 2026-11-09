@@ -132,6 +132,24 @@ export interface BacktestChart {
 export const getBacktestChart = (months = 12) =>
   apiFetch<BacktestChart>(`/api/signals/backtest/chart?months=${months}`);
 
+export interface SectorStrength {
+  sector_code: string;
+  sector_name: string;
+  stock_count: number;
+  avg_up_probability: number;
+  up_count: number;
+  down_count: number;
+}
+
+export interface SectorHeatmap {
+  date: string | null;
+  sectors: SectorStrength[];
+  min_stocks: number;
+}
+
+export const getSectorHeatmap = () =>
+  apiFetch<SectorHeatmap>("/api/signals/sectors");
+
 /** Pro 専用: シグナル CSV をダウンロード */
 export async function downloadSignalsCsv(signal?: "UP" | "DOWN", days = 30) {
   const params = new URLSearchParams({ days: String(days) });
