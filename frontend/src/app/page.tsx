@@ -38,11 +38,11 @@ const STYLE_TABS: StyleConfig[] = [
     id: "daytrade",
     label: "デイトレ",
     icon: Zap,
-    description: "翌日の短期騰落を予測",
+    description: "翌日の相対的な強弱を予測",
     proOnly: false,
-    defaultMinProb: 65,
+    defaultMinProb: 50,
     signalFilter: "ALL",
-    hint: "翌営業日に上昇 / 下落する可能性の高い銘柄をLGBM×XGBoostアンサンブルで配信",
+    hint: "翌営業日に市場平均を上回る / 下回ると予測される銘柄をLGBM×XGBoostアンサンブルで配信",
   },
   {
     id: "swing",
@@ -50,9 +50,9 @@ const STYLE_TABS: StyleConfig[] = [
     icon: RefreshCw,
     description: "数日〜2週間の中期保有",
     proOnly: true,
-    defaultMinProb: 70,
+    defaultMinProb: 50,
     signalFilter: "UP",
-    hint: "高確度（70%以上）の上昇シグナルのみ表示。数日〜2週間の保有を想定",
+    hint: "市場を上回ると予測される銘柄のみ表示。数日〜2週間の保有を想定（確度スライダーで絞り込み）",
   },
   {
     id: "longterm",
@@ -60,17 +60,17 @@ const STYLE_TABS: StyleConfig[] = [
     icon: BarChart3,
     description: "月次・四半期視点のトレンド",
     proOnly: true,
-    defaultMinProb: 75,
+    defaultMinProb: 50,
     signalFilter: "UP",
-    hint: "強い上昇トレンドを示す銘柄のみ（確度75%以上）。長期保有・積み立て向け",
+    hint: "市場を上回ると予測される銘柄のみ表示。長期保有・積み立て向け（確度スライダーで絞り込み）",
   },
   {
     id: "short",
     label: "信用売り",
     icon: ShortIcon,
-    description: "下落シグナル銘柄を抽出",
+    description: "市場より弱いと予測される銘柄を抽出",
     proOnly: true,
-    defaultMinProb: 65,
+    defaultMinProb: 50,
     signalFilter: "DOWN",
     hint: "市場を下回ると予測される銘柄を抽出（相対的な弱さの目安。市場全体が上昇する日は下がらないこともあります）",
   },
@@ -121,7 +121,7 @@ function ProbabilityFilter({ value, onChange }: { value: number; onChange: (v: n
       <SlidersHorizontal size={13} className="text-slate-400 shrink-0" />
       <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-semibold">確度 ≥</span>
       <input
-        type="range" min={50} max={95} step={5} value={value}
+        type="range" min={50} max={80} step={1} value={value}
         onChange={e => onChange(Number(e.target.value))}
         className="w-24 accent-teal-600"
       />
@@ -436,7 +436,7 @@ export default function HomePage() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
   const [styleTab, setStyleTab] = useState<StyleTab>("daytrade");
-  const [minProb, setMinProb] = useState(65);
+  const [minProb, setMinProb] = useState(50);
   const [csvLoading, setCsvLoading] = useState(false);
 
   const styleConfig = STYLE_TABS.find(t => t.id === styleTab)!;

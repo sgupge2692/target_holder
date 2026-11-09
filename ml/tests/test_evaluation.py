@@ -297,3 +297,32 @@ def test_shuffle_keeps_daily_balance_and_breaks_pairing():
     assert (before == after).all()
     # ただし銘柄との対応は壊れている
     assert (y.values != y_shuf.values).mean() > 0.3
+
+
+# ── シグナルの割り当て（校正後に確率が 50% 付近に寄っても空にならない） ───────────
+
+def test_assign_signals_threshold_and_minimum_per_side():
+    from pipeline.predict import assign_signals
+    rng = np.random.default_rng(0)
+    p = rng.uniform(0.47, 0.56, 200)                    # 校正後の確率: 0.60 を超える銘柄が 1 件も無い
+
+    sig_old = assign_signals(p, threshold=0.60, min_per_side=0)
+    assert (sig_old == "NEUTRAL").all()                  # 従来のしきい値だけだと、シグナルが空になる
+
+    sig = assign_signals(p, threshold=0.60, min_per_side=10)
+    assert (sig == "UP").sum() == 10 and (sig == "DOWN").sum() == 10
+    # 補うのは確度の高い順（UP は確率が高い 10 件、DOWN は低い 10 件）
+    assert set(p[sig == "UP"]) == set(np.sort(p)[-10:])
+    assert set(p[sig == "DOWN"]) == set(np.sort(p)[:10])
+
+
+def test_assign_signals_keeps_threshold_hits_and_never_overlaps():
+    from pipeline.predict import assign_signals
+    p = np.array([0.9, 0.85, 0.7, 0.5, 0.5, 0.5, 0.3, 0.1, 0.05])
+    sig = assign_signals(p, threshold=0.60, min_per_side=2)
+    assert list(sig[:3]) == ["UP", "UP", "UP"]           # しきい値超えは min を超えてもそのまま
+    assert list(sig[-3:]) == ["DOWN", "DOWN", "DOWN"]
+    assert list(sig[3:6]) == ["NEUTRAL"] * 3             # すでに足りているので補わない
+
+    tiny = assign_signals(np.array([0.52, 0.48]), threshold=0.60, min_per_side=5)
+    assert sorted(tiny) == ["DOWN", "UP"]                # 銘柄が少なくても 1 銘柄が両方に入らない

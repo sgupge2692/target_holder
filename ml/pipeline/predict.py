@@ -102,13 +102,53 @@ FEATURE_LABELS = {
     "new_low_60d":            "60日安値更新",
 }
 
-CONFIDENCE_THRESHOLD = 0.60
+# シグナルを出す確度のしきい値（校正後の確率）。env で上書きできる。
+CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.60"))
+# 確率校正後は確率が 50% 付近に寄り、しきい値を超える銘柄がほとんど無くなりうる。
+# その日のシグナルが空にならないよう、UP / DOWN それぞれ最低この件数を確度の高い順に出す。
+# 0 にすると従来どおり、しきい値を超えたものだけ。
+MIN_SIGNALS_PER_SIDE = int(os.getenv("MIN_SIGNALS_PER_SIDE", "10"))
+
+
+def assign_signals(
+    up_prob: np.ndarray,
+    threshold: float = CONFIDENCE_THRESHOLD,
+    min_per_side: int = MIN_SIGNALS_PER_SIDE,
+) -> np.ndarray:
+    """
+    市場超過確率から UP / DOWN / NEUTRAL を決める。
+
+    1. しきい値以上を UP、(1 - しきい値) 以下を DOWN
+    2. UP / DOWN が min_per_side 件に満たなければ、中立のうち確度の高い順に補う
+       （確率はそのまま表示されるので、「51%」を「確実」と見せることにはならない）
+    """
+    p = np.asarray(up_prob, dtype=float)
+    sig = np.where(p >= threshold, "UP", np.where(p <= 1 - threshold, "DOWN", "NEUTRAL")).astype(object)
+
+    if min_per_side > 0:
+        # UP に補うのは 50% 超、DOWN に補うのは 50% 未満のものだけ（逆向きの銘柄を混ぜない）
+        for side, order, ok in (
+            ("UP", np.argsort(-p, kind="stable"), p > 0.5),
+            ("DOWN", np.argsort(p, kind="stable"), p < 0.5),
+        ):
+            need = min_per_side - int((sig == side).sum())
+            for idx in order:
+                if need <= 0:
+                    break
+                if sig[idx] == "NEUTRAL" and ok[idx]:
+                    sig[idx] = side
+                    need -= 1
+    return sig.astype(str)
 
 
 def get_top_features(model, feature_values: dict, n: int = 5, feat_cols: list | None = None) -> list[dict]:
     """LightGBM の feature importance 上位 n 件と実際の値を返す"""
     cols = feat_cols or FEATURE_COLS
-    importances = model.feature_importances_
+    # LGBMClassifier(sklearn API)は feature_importances_、Booster は feature_importance()
+    if hasattr(model, "feature_importances_"):
+        importances = model.feature_importances_
+    else:
+        importances = model.feature_importance(importance_type="gain")
     ranked = sorted(
         zip(cols, importances, [feature_values.get(f) for f in cols]),
         key=lambda x: x[1],
@@ -278,10 +318,7 @@ def main(output_summary: str | None = None, dry_run: bool = False):
     proba = np.column_stack([1 - up_prob, up_prob])
     latest_valid = latest.loc[valid_idx].copy()
     latest_valid["up_probability"] = up_prob
-    latest_valid["signal"] = np.where(
-        latest_valid["up_probability"] >= CONFIDENCE_THRESHOLD, "UP",
-        np.where(latest_valid["up_probability"] <= (1 - CONFIDENCE_THRESHOLD), "DOWN", "NEUTRAL"),
-    )
+    latest_valid["signal"] = assign_signals(latest_valid["up_probability"].to_numpy())
     latest_valid["predicted_at"] = datetime.now()
 
     # シグナルのみ対象
