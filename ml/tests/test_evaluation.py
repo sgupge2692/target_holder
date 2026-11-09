@@ -246,3 +246,54 @@ def test_train_saves_calibrator_and_predict_applies_it(tmp_path, monkeypatch):
     cal = apply_calibration(p, params)
     assert (np.diff(cal) > 0).all()                       # 単調増加
     assert np.array_equal(apply_calibration(p, None), p)  # 校正器が無ければそのまま
+
+
+# ── 健全性チェック（リーク検出） ────────────────────────────────────────
+
+def _leak_data(leaky: bool, n_dates=120, n_codes=40, seed=0):
+    df = _panel(n_dates=n_dates, n_codes=n_codes, seed=seed, signal=0.0)       # 特徴量と無関係な純ノイズ
+    df = df.sort_values(["Date", "Code"]).reset_index(drop=True)
+    y = (df["label"] == 1).astype(int)
+    X = df[["rsi", "ma5_deviation"]].copy()
+    if leaky:
+        # 翌日リターンから作った特徴量（未来のデータが混入した状態）
+        X["leaky_feature"] = df["next_return"] + np.random.default_rng(1).normal(scale=0.005, size=len(df))
+    return X, y, df["Date"]
+
+
+def test_sanity_checks_flag_leaky_feature():
+    from pipeline.sanity_checks import single_feature_auc_scan, run_checks
+    X, y, dates = _leak_data(leaky=True)
+
+    scan = single_feature_auc_scan(X, y)
+    assert scan.iloc[0]["feature"] == "leaky_feature"
+    assert bool(scan.iloc[0]["suspect"]) is True
+    assert not scan[scan["feature"] == "rsi"]["suspect"].any()
+
+    result = run_checks(X, y, dates, verbose=False)
+    assert result["ok"] is False
+    assert result["suspect_features"] == ["leaky_feature"]
+
+
+def test_sanity_checks_pass_on_clean_noise():
+    pytest.importorskip("lightgbm")
+    from pipeline.sanity_checks import run_checks
+    X, y, dates = _leak_data(leaky=False)
+
+    result = run_checks(X, y, dates, verbose=False)
+    assert result["ok"] is True
+    assert abs(result["shuffled_auc"] - 0.5) < 0.02
+    assert result["suspect_features"] == []
+
+
+def test_shuffle_keeps_daily_balance_and_breaks_pairing():
+    from pipeline.sanity_checks import shuffle_labels_within_date
+    X, y, dates = _leak_data(leaky=False, n_dates=30, n_codes=50)
+    y_shuf = shuffle_labels_within_date(y, dates)
+
+    # 各日の上昇本数は変わらない（地合いは保つ）
+    before = y.groupby(dates.values).sum()
+    after = y_shuf.groupby(dates.values).sum()
+    assert (before == after).all()
+    # ただし銘柄との対応は壊れている
+    assert (y.values != y_shuf.values).mean() > 0.3
