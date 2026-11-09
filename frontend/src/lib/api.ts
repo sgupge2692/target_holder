@@ -189,6 +189,24 @@ export const getQuotes = (code: string) =>
     `/api/stocks/${code}/quotes`
   );
 
+export interface PeerStock {
+  code: string; company_name: string; signal: string; up_probability: number;
+}
+export interface PeersResponse {
+  code: string;
+  sector_code: string | null;
+  sector_name: string | null;
+  stock_count: number;                 // 業種内で予測がある銘柄数
+  rank: number | null;                 // 業種内の順位（市場を上回る確率が高い順）
+  up_probability: number | null;
+  avg_up_probability: number | null;   // 業種平均
+  peers: PeerStock[];                  // Pro のみ。同業種の上位銘柄（自分を除く）
+  peers_locked: boolean;
+}
+
+export const getPeers = (code: string) =>
+  apiFetch<PeersResponse>(`/api/stocks/${code}/peers`);
+
 // ── 四季報要約 ────────────────────────────────────────────────
 
 export interface Summary {
