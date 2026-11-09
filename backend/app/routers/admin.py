@@ -71,8 +71,8 @@ async def get_stats(
                 COUNT(*) FILTER (WHERE signal='DOWN') as down_count,
                 COUNT(*) FILTER (WHERE actual_return IS NOT NULL) as evaluated,
                 ROUND(
-                  COUNT(*) FILTER (WHERE signal='UP' AND actual_return > 0)::numeric
-                  / NULLIF(COUNT(*) FILTER (WHERE signal='UP' AND actual_return IS NOT NULL), 0)
+                  COUNT(*) FILTER (WHERE signal='UP' AND is_correct)::numeric
+                  / NULLIF(COUNT(*) FILTER (WHERE signal='UP' AND is_correct IS NOT NULL), 0)
                   * 100, 1
                 ) as up_accuracy
             FROM predictions
@@ -169,8 +169,8 @@ async def daily_signal_stats(
                 COUNT(*) FILTER (WHERE signal='UP') as up,
                 COUNT(*) FILTER (WHERE signal='DOWN') as down,
                 ROUND(
-                  COUNT(*) FILTER (WHERE signal='UP' AND actual_return > 0)::numeric
-                  / NULLIF(COUNT(*) FILTER (WHERE signal='UP' AND actual_return IS NOT NULL), 0)
+                  COUNT(*) FILTER (WHERE signal='UP' AND is_correct)::numeric
+                  / NULLIF(COUNT(*) FILTER (WHERE signal='UP' AND is_correct IS NOT NULL), 0)
                   * 100, 1
                 ) as accuracy_pct
             FROM predictions
