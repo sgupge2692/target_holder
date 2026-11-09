@@ -70,57 +70,116 @@ def test_send_with_retry_exponential_backoff():
     assert calls == [2, 4]  # 2^1, 2^2
 
 
-# ── fetch_today_signals のテスト ────────────────────────────────────────
+# ── DB まわり（モックではなく実際の SQL を SQLite で動かす） ─────────────────
+# モックだと、存在しない列名を参照していても気づけない（実際にそれで本番では失敗していた）。
+
+from datetime import date, timedelta
+from sqlalchemy import text as sa_text
+from sqlalchemy.ext.asyncio import AsyncSession as RealSession, create_async_engine as real_engine
+
+
+async def _make_session():
+    engine = real_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.execute(sa_text("CREATE TABLE listed_stocks (code TEXT PRIMARY KEY, company_name TEXT)"))
+        await conn.execute(sa_text('''CREATE TABLE predictions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, "Code" TEXT, "Date" TEXT,
+            up_probability REAL, signal TEXT, is_correct INTEGER)'''))
+        await conn.execute(sa_text("CREATE TABLE watchlist (id INTEGER PRIMARY KEY, user_id INTEGER, code TEXT, company_name TEXT)"))
+    return engine, RealSession(engine)
+
+
+async def _add_pred(session, code, d, prob, sig, ok=None):
+    await session.execute(
+        sa_text('INSERT INTO predictions ("Code","Date",up_probability,signal,is_correct) VALUES (:c,:d,:p,:s,:ok)'),
+        {"c": code, "d": d.isoformat(), "p": prob, "s": sig, "ok": ok},
+    )
+
 
 @pytest.mark.asyncio
-async def test_fetch_today_signals_returns_list():
-    """DBをモックして今日のシグナルが取得できることを確認"""
+async def test_fetch_today_signals_latest_day_up_only_sorted():
     from scripts.send_daily_signals import fetch_today_signals
+    engine, session = await _make_session()
+    today, yday = date.today(), date.today() - timedelta(days=1)
+    await session.execute(sa_text("INSERT INTO listed_stocks VALUES ('7203','トヨタ自動車')"))
+    await _add_pred(session, "7203", today, 0.58, "UP")
+    await _add_pred(session, "9984", today, 0.62, "UP")
+    await _add_pred(session, "6758", today, 0.40, "DOWN")      # DOWN は含めない
+    await _add_pred(session, "1111", yday, 0.99, "UP")         # 古い日は含めない
+    await session.commit()
 
-    mock_row = MagicMock()
-    mock_row.code = "7203"
-    mock_row.company_name = "トヨタ自動車"
-    mock_row.signal = "UP"
-    mock_row.probability = 0.82
-    mock_row.pred_date = "2026-10-31"
-
-    mock_result = MagicMock()
-    mock_result.fetchall.return_value = [mock_row]
-
-    mock_session = AsyncMock()
-    mock_session.execute = AsyncMock(return_value=mock_result)
-
-    signals = await fetch_today_signals(mock_session, limit=10)
-    assert len(signals) == 1
-    assert signals[0]["code"] == "7203"
-    assert signals[0]["signal"] == "UP"
-    assert signals[0]["probability_pct"] == pytest.approx(82.0)
+    signals = await fetch_today_signals(session, limit=10)
+    assert [s["code"] for s in signals] == ["9984", "7203"]    # 確度の高い順
+    assert signals[1]["company_name"] == "トヨタ自動車"
+    assert signals[0]["company_name"] == "9984"                # 名前が無ければコード
+    assert signals[0]["probability_pct"] == pytest.approx(62.0)
+    assert signals[0]["pred_date"] == today.isoformat()
+    await session.close(); await engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_fetch_today_signals_fallback_to_7days():
-    """本日分がない場合は7日以内にフォールバック"""
+async def test_fetch_today_signals_empty_table():
     from scripts.send_daily_signals import fetch_today_signals
+    engine, session = await _make_session()
+    assert await fetch_today_signals(session) == []
+    await session.close(); await engine.dispose()
 
-    mock_row = MagicMock()
-    mock_row.code = "9984"
-    mock_row.company_name = "SoftBank"
-    mock_row.signal = "UP"
-    mock_row.probability = 0.75
-    mock_row.pred_date = "2026-10-30"
 
-    # 1回目（今日）: 空、2回目（7日以内）: 1件
-    mock_result_empty = MagicMock()
-    mock_result_empty.fetchall.return_value = []
-    mock_result_data = MagicMock()
-    mock_result_data.fetchall.return_value = [mock_row]
+@pytest.mark.asyncio
+async def test_fetch_accuracy_requires_enough_samples():
+    from scripts.send_daily_signals import fetch_accuracy, MIN_ACCURACY_SAMPLES
+    engine, session = await _make_session()
+    d = date.today() - timedelta(days=3)
+    for i in range(MIN_ACCURACY_SAMPLES - 1):
+        await _add_pred(session, f"{i}", d, 0.6, "UP", ok=1)
+    await session.commit()
+    assert await fetch_accuracy(session) == {}                 # 母数不足なら出さない
 
-    mock_session = AsyncMock()
-    mock_session.execute = AsyncMock(side_effect=[mock_result_empty, mock_result_data])
+    await _add_pred(session, "x", d, 0.6, "UP", ok=0)
+    await session.commit()
+    acc = await fetch_accuracy(session)
+    assert acc["UP"]["total"] == MIN_ACCURACY_SAMPLES
+    assert acc["UP"]["accuracy_pct"] == pytest.approx((MIN_ACCURACY_SAMPLES - 1) * 100 / MIN_ACCURACY_SAMPLES)
+    await session.close(); await engine.dispose()
 
-    signals = await fetch_today_signals(mock_session, limit=10)
-    assert len(signals) == 1
-    assert signals[0]["code"] == "9984"
+
+@pytest.mark.asyncio
+async def test_fetch_watch_changes_only_flipped_and_grouped_by_user():
+    from scripts.send_daily_signals import fetch_watch_changes
+    engine, session = await _make_session()
+    today, yday = date.today(), date.today() - timedelta(days=1)
+    await session.execute(sa_text("INSERT INTO listed_stocks VALUES ('7203','トヨタ自動車')"))
+    # 7203: NEUTRAL → UP（変化）、9984: UP → UP（変化なし）、6758: 前回なし、4063: NEUTRAL → NEUTRAL
+    for code, prev, now in [("7203", "NEUTRAL", "UP"), ("9984", "UP", "UP"), ("4063", "NEUTRAL", "NEUTRAL")]:
+        await _add_pred(session, code, yday, 0.5, prev)
+        await _add_pred(session, code, today, 0.6, now)
+    await _add_pred(session, "6758", today, 0.6, "UP")
+    for uid, code in [(1, "7203"), (1, "9984"), (2, "7203"), (2, "6758"), (2, "4063")]:
+        await session.execute(sa_text("INSERT INTO watchlist (user_id, code) VALUES (:u,:c)"), {"u": uid, "c": code})
+    await session.commit()
+
+    changes = await fetch_watch_changes(session, today)
+    assert set(changes) == {1, 2}
+    assert [c["code"] for c in changes[1]] == ["7203"]
+    assert changes[1][0]["prev_signal"] == "NEUTRAL" and changes[1][0]["signal"] == "UP"
+    assert changes[1][0]["company_name"] == "トヨタ自動車"
+    assert [c["code"] for c in changes[2]] == ["7203"]         # 前回なし・中立のままは含めない
+    await session.close(); await engine.dispose()
+
+
+def test_render_email_includes_watch_changes_and_relative_wording():
+    from app.notifications import render_daily_signal_email
+    html = render_daily_signal_email(
+        date="2026-11-09",
+        signals=[{"code": "7203", "company_name": "トヨタ", "signal": "UP", "probability_pct": 58.0}],
+        accuracy_pct=52.3, accuracy_n=120,
+        watch_changes=[{"code": "9984", "company_name": "SB", "prev_signal": "UP", "signal": "DOWN", "probability_pct": 41.0}],
+    )
+    assert "ウォッチ中の銘柄に変化があります" in html
+    assert "市場より強い" in html and "市場より弱い" in html
+    assert "n=120" in html and "投資助言・売買の推奨ではありません" in html
+    plain = render_daily_signal_email(date="2026-11-09", signals=[])
+    assert "ウォッチ中の銘柄に変化があります" not in plain
 
 
 # ── main の dry-run テスト ──────────────────────────────────────────────
@@ -130,13 +189,13 @@ async def test_main_dry_run_does_not_send():
     """dry_run=True のときメールは送信されない"""
     from scripts.send_daily_signals import main
 
-    mock_signals = [{"code": "7203", "company_name": "トヨタ", "signal": "UP", "probability_pct": 80.0, "pred_date": "2026-10-31"}]
+    mock_signals = [{"code": "7203", "company_name": "トヨタ", "signal": "UP", "probability_pct": 80.0, "pred_date": date.today().isoformat()}]
     mock_user = MagicMock()
     mock_user.email = "pro@example.com"
 
     mock_engine = AsyncMock()
     with patch("scripts.send_daily_signals.fetch_today_signals", new=AsyncMock(return_value=mock_signals)):
-        with patch("scripts.send_daily_signals.fetch_accuracy", new=AsyncMock(return_value={})):
+        with patch("scripts.send_daily_signals.fetch_accuracy", new=AsyncMock(return_value={})), patch("scripts.send_daily_signals.fetch_watch_changes", new=AsyncMock(return_value={})):
             with patch("scripts.send_daily_signals.get_alert_subscribers", new=AsyncMock(return_value=[mock_user])):
                 with patch("scripts.send_daily_signals.create_async_engine", return_value=mock_engine):
                     with patch("scripts.send_daily_signals.AsyncSession"):
@@ -155,12 +214,12 @@ async def test_main_with_limit():
     """user_limit で送信対象を絞れる"""
     from scripts.send_daily_signals import main
 
-    mock_signals = [{"code": "7203", "company_name": "トヨタ", "signal": "UP", "probability_pct": 80.0, "pred_date": "2026-10-31"}]
+    mock_signals = [{"code": "7203", "company_name": "トヨタ", "signal": "UP", "probability_pct": 80.0, "pred_date": date.today().isoformat()}]
     mock_users = [MagicMock(email=f"user{i}@example.com") for i in range(5)]
 
     mock_engine2 = AsyncMock()
     with patch("scripts.send_daily_signals.fetch_today_signals", new=AsyncMock(return_value=mock_signals)):
-        with patch("scripts.send_daily_signals.fetch_accuracy", new=AsyncMock(return_value={})):
+        with patch("scripts.send_daily_signals.fetch_accuracy", new=AsyncMock(return_value={})), patch("scripts.send_daily_signals.fetch_watch_changes", new=AsyncMock(return_value={})):
             with patch("scripts.send_daily_signals.get_alert_subscribers", new=AsyncMock(return_value=mock_users)):
                 with patch("scripts.send_daily_signals.create_async_engine", return_value=mock_engine2):
                     with patch("scripts.send_daily_signals.AsyncSession"):

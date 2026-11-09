@@ -47,79 +47,106 @@ SEND_INTERVAL = float(os.getenv("EMAIL_SEND_INTERVAL", "0.1"))
 MAX_RETRIES = int(os.getenv("EMAIL_MAX_RETRIES", "3"))
 
 
+STALE_AFTER_DAYS = 4          # 最新シグナルがこれより古ければ配信しない（連休明け等に古い情報を送らない）
+ACCURACY_WINDOW_DAYS = 30
+MIN_ACCURACY_SAMPLES = 30     # 母数が少ない的中率は載せない
+
+
+def _to_date(value) -> date | None:
+    """DB の日付（date / datetime / 文字列）を date にそろえる"""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return date.fromisoformat(value[:10])
+    if hasattr(value, "date"):
+        return value.date()
+    return value
+
+
 async def fetch_today_signals(session: AsyncSession, limit: int = 50) -> list[dict]:
-    """今日の予測シグナルを取得。なければ直近営業日のシグナルを取得。"""
-    today = date.today().isoformat()
+    """
+    最新日の「市場平均を上回る」シグナル（UP）を、確度の高い順に取得する。
+    （列名は db/init.sql の実スキーマ: "Code" / "Date" / up_probability）
+    """
+    latest = _to_date((await session.execute(text('SELECT MAX("Date") FROM predictions'))).scalar())
+    if latest is None:
+        return []
+
     result = await session.execute(
         text("""
-            SELECT p.code, ls.company_name, p.signal, p.probability,
-                   p.predicted_at::date AS pred_date
+            SELECT p."Code" AS code, ls.company_name, p.signal, p.up_probability, p."Date" AS pred_date
             FROM predictions p
-            LEFT JOIN listed_stocks ls ON p.code = ls.code
-            WHERE p.predicted_at::date = :today
-              AND p.signal = 'UP'
-            ORDER BY p.probability DESC
+            LEFT JOIN listed_stocks ls ON ls.code = p."Code"
+            WHERE p."Date" = :d AND p.signal = 'UP'
+            ORDER BY p.up_probability DESC
             LIMIT :limit
         """),
-        {"today": today, "limit": limit},
+        {"d": latest, "limit": limit},
     )
-    rows = result.fetchall()
-
-    # 本日分がなければ直近7営業日以内を検索
-    if not rows:
-        logger.info("本日のシグナルなし。直近7日以内のデータを検索します。")
-        cutoff = (date.today() - timedelta(days=7)).isoformat()
-        result = await session.execute(
-            text("""
-                SELECT p.code, ls.company_name, p.signal, p.probability,
-                       p.predicted_at::date AS pred_date
-                FROM predictions p
-                LEFT JOIN listed_stocks ls ON p.code = ls.code
-                WHERE p.predicted_at::date >= :cutoff
-                  AND p.signal = 'UP'
-                ORDER BY p.predicted_at DESC, p.probability DESC
-                LIMIT :limit
-            """),
-            {"cutoff": cutoff, "limit": limit},
-        )
-        rows = result.fetchall()
-
     return [
         {
             "code": r.code,
             "company_name": r.company_name or r.code,
             "signal": r.signal,
-            "probability_pct": float(r.probability) * 100 if r.probability else 0,
-            "pred_date": str(r.pred_date),
+            "probability_pct": float(r.up_probability) * 100 if r.up_probability is not None else 0.0,
+            "pred_date": str(_to_date(r.pred_date)),
         }
-        for r in rows
+        for r in result.fetchall()
     ]
 
 
 async def fetch_accuracy(session: AsyncSession) -> dict:
-    """直近30日の UP/DOWN 精度を取得"""
-    result = await session.execute(
+    """直近30日の UP シグナルの的中率（対市場の判定 is_correct）。母数が少なければ空。"""
+    since = date.today() - timedelta(days=ACCURACY_WINDOW_DAYS)
+    row = (await session.execute(
         text("""
-            SELECT
-                signal,
-                COUNT(*) FILTER (WHERE actual_return > 0) * 100.0 / NULLIF(COUNT(*), 0) AS acc,
-                AVG(actual_return) * 100 AS avg_ret,
-                COUNT(*) AS total
+            SELECT SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) AS hits, COUNT(*) AS total
             FROM predictions
-            WHERE actual_return IS NOT NULL
-              AND predicted_at >= NOW() - INTERVAL '30 days'
-            GROUP BY signal
-        """)
+            WHERE signal = 'UP' AND is_correct IS NOT NULL AND "Date" >= :since
+        """),
+        {"since": since},
+    )).fetchone()
+    if not row or not row.total or row.total < MIN_ACCURACY_SAMPLES:
+        return {}
+    return {"UP": {"accuracy_pct": float(row.hits or 0) * 100.0 / row.total, "total": int(row.total)}}
+
+
+async def fetch_watch_changes(session: AsyncSession, signal_date: date) -> dict[int, list[dict]]:
+    """
+    ウォッチリストの銘柄のうち、前回の予測からシグナルが変わったもの（UP/DOWN/NEUTRAL の入れ替わり）。
+    Returns: {user_id: [{"code","company_name","prev_signal","signal","probability_pct"}]}
+    """
+    rows = await session.execute(
+        text("""
+            SELECT w.user_id, w.code,
+                   COALESCE(w.company_name, ls.company_name) AS company_name,
+                   p.signal, p.up_probability,
+                   (SELECT p2.signal FROM predictions p2
+                     WHERE p2."Code" = p."Code" AND p2."Date" < p."Date"
+                     ORDER BY p2."Date" DESC LIMIT 1) AS prev_signal
+            FROM watchlist w
+            JOIN predictions p ON p."Code" = w.code
+            LEFT JOIN listed_stocks ls ON ls.code = w.code
+            WHERE p."Date" = :d
+              AND p.id IN (SELECT MAX(id) FROM predictions WHERE "Date" = :d GROUP BY "Code")
+            ORDER BY w.user_id, w.code
+        """),
+        {"d": signal_date},
     )
-    rows = result.fetchall()
-    info: dict = {}
-    for r in rows:
-        info[r.signal] = {
-            "accuracy_pct": float(r.acc) if r.acc else None,
-            "avg_return_pct": float(r.avg_ret) if r.avg_ret else None,
-            "total": r.total,
-        }
-    return info
+    changes: dict[int, list[dict]] = {}
+    for r in rows.fetchall():
+        if r.prev_signal is None or r.prev_signal == r.signal:
+            continue
+        if r.signal == "NEUTRAL" and r.prev_signal == "NEUTRAL":
+            continue
+        changes.setdefault(r.user_id, []).append({
+            "code": r.code,
+            "company_name": r.company_name or r.code,
+            "prev_signal": r.prev_signal,
+            "signal": r.signal,
+            "probability_pct": float(r.up_probability) * 100,
+        })
+    return changes
 
 
 async def get_alert_subscribers(session: AsyncSession) -> list[User]:
@@ -159,6 +186,8 @@ async def main(
     async with AsyncSession(engine) as session:
         signals = await fetch_today_signals(session, limit=50)
         accuracy_info = await fetch_accuracy(session)
+        signal_date = _to_date(signals[0]["pred_date"]) if signals else None
+        watch_changes = await fetch_watch_changes(session, signal_date) if signal_date else {}
         if test_email:
             # テスト送信: 指定アドレスに1通だけ送る
             result = await session.execute(
@@ -180,7 +209,11 @@ async def main(
         return
 
     signal_date_str = signals[0].get("pred_date", today_str)
-    subject = f"📈 {signal_date_str}のAIシグナル — UP候補 {len(signals)}銘柄"
+    age = (date.today() - signal_date).days if signal_date else 0
+    if age > STALE_AFTER_DAYS:
+        logger.warning(f"最新シグナルが {signal_date_str}（{age}日前）で古いため、配信をスキップします。")
+        return
+    subject = f"📈 {signal_date_str}のAIシグナル — 市場を上回ると予測 {len(signals)}銘柄"
     if test_email:
         subject = f"[テスト] {subject}"
 
@@ -194,12 +227,15 @@ async def main(
     sent = failed = skipped = 0
     for user in targets:
         unsub_url = make_unsubscribe_url(user.id, user.email, SITE_URL)
+        user_changes = watch_changes.get(user.id, [])
         html = render_daily_signal_email(
             date=signal_date_str,
             signals=signals,
             accuracy_pct=up_accuracy,
             site_url=SITE_URL,
             unsubscribe_url=unsub_url,
+            watch_changes=user_changes,
+            accuracy_n=accuracy_info.get("UP", {}).get("total"),
         )
 
         if dry_run:

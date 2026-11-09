@@ -152,17 +152,22 @@ def _base_template(content: str, unsubscribe_url: str = "") -> str:
 </html>"""
 
 
+_SIGNAL_LABEL = {"UP": "市場より強い", "DOWN": "市場より弱い", "NEUTRAL": "中立"}
+
+
 def render_daily_signal_email(
     date: str,
     signals: list[dict],
     accuracy_pct: Optional[float] = None,
     site_url: str = "https://kabumi.app",
     unsubscribe_url: str = "",
+    watch_changes: Optional[list[dict]] = None,
+    accuracy_n: Optional[int] = None,
 ) -> str:
-    """日次シグナルメール HTML を生成"""
+    """日次シグナルメール HTML を生成（市場平均との相対予測。ウォッチ銘柄の変化があれば先頭に載せる）"""
     rows = ""
-    for s in signals[:10]:  # Free は最大10件
-        badge = f'<span class="badge-up">UP ↑</span>' if s.get("signal") == "UP" else f'<span class="badge-down">DOWN ↓</span>'
+    for s in signals[:10]:
+        badge = '<span class="badge-up">市場より強い ↑</span>' if s.get("signal") == "UP" else '<span class="badge-down">市場より弱い ↓</span>'
         prob = s.get("probability_pct", 0)
         rows += f"""<tr>
           <td><strong>{s.get("code", "")}</strong><br><small style="color:#64748b">{s.get("company_name", "")}</small></td>
@@ -170,17 +175,42 @@ def render_daily_signal_email(
           <td class="prob">{prob:.1f}%</td>
         </tr>"""
 
-    acc_line = f'<p style="color:#64748b;font-size:13px;">直近モデル精度: <strong>{accuracy_pct:.1f}%</strong></p>' if accuracy_pct else ""
+    n_text = f"（n={accuracy_n}）" if accuracy_n else ""
+    acc_line = (
+        f'<p style="color:#64748b;font-size:13px;">直近30日の的中率（対市場）: <strong>{accuracy_pct:.1f}%</strong>{n_text}</p>'
+        if accuracy_pct else ""
+    )
+
+    watch_html = ""
+    if watch_changes:
+        items = ""
+        for c in watch_changes:
+            prev = _SIGNAL_LABEL.get(c.get("prev_signal"), c.get("prev_signal") or "-")
+            now = _SIGNAL_LABEL.get(c.get("signal"), c.get("signal") or "-")
+            items += f"""<tr>
+          <td><strong>{c.get("code", "")}</strong><br><small style="color:#64748b">{c.get("company_name", "")}</small></td>
+          <td>{prev} → <strong>{now}</strong></td>
+          <td class="prob">{c.get("probability_pct", 0):.1f}%</td>
+        </tr>"""
+        watch_html = f"""
+<h3 style="color:#0f172a;margin-bottom:0;">ウォッチ中の銘柄に変化があります</h3>
+<table class="signal-table">
+  <thead><tr><th>銘柄</th><th>前回 → 今回</th><th>確率</th></tr></thead>
+  <tbody>{items}</tbody>
+</table>
+"""
 
     content = f"""
-<h2 style="margin-top:0;color:#0f172a;">本日（{date}）のAIシグナル</h2>
+<h2 style="margin-top:0;color:#0f172a;">{date} のAIシグナル</h2>
+<p style="font-size:13px;color:#64748b;">翌営業日に<strong>市場平均を上回る</strong>可能性が高いと予測した銘柄です。株価が上がることを意味するものではありません。</p>
 {acc_line}
+{watch_html}
 <table class="signal-table">
-  <thead><tr><th>銘柄</th><th>シグナル</th><th>確率</th></tr></thead>
+  <thead><tr><th>銘柄</th><th>シグナル</th><th>市場を上回る確率</th></tr></thead>
   <tbody>{rows}</tbody>
 </table>
 <p style="font-size:13px;color:#64748b;">
-  ※ 翌営業日の株価変動予測です。投資は自己責任でお願いします。
+  ※ 情報提供を目的としたもので、投資助言・売買の推奨ではありません。予測は外れることがあり、投資判断は自己責任でお願いします。
 </p>
 <a href="{site_url}" class="btn">シグナル詳細を見る →</a>
 """

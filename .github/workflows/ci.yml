@@ -131,7 +131,7 @@ jobs:
       - name: Install deps
         run: |
           pip install pytest pytest-asyncio
-          pip install "sqlalchemy[asyncio]" asyncpg aiopg python-dotenv greenlet
+          pip install "sqlalchemy[asyncio]" asyncpg aiopg aiosqlite python-dotenv greenlet
 
       - name: Run script unit tests
         env:
