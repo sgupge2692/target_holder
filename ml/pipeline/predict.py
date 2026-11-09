@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-MODEL_DIR = "/app/models"
+MODEL_DIR = os.getenv("MODEL_DIR", "/app/models")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 FEATURE_COLS = [
@@ -347,16 +347,24 @@ def main(output_summary: str | None = None, dry_run: bool = False):
     signals["explanation"] = explanations
     signals["key_factors"] = key_factors_list
 
+    # NEUTRAL も保存する。保存しないと、(1) 前日 UP だった銘柄が今日 NEUTRAL になっても古い UP が
+    # 「最新」として残る、(2) 業種別・同業種比較が「シグナルが出た銘柄だけ」の偏った集計になる、
+    # (3) 「中立 → UP」といった変化を検知できない。API の一覧・的中率は UP/DOWN だけを対象にする。
+    neutral = latest_valid[latest_valid["signal"] == "NEUTRAL"].copy()
+    neutral["explanation"] = ""
+    neutral["key_factors"] = "[]"
+    to_save = pd.concat([signals, neutral], ignore_index=True)
+
     up_count = int((signals["signal"] == "UP").sum())
     down_count = int((signals["signal"] == "DOWN").sum())
 
     # DB に保存（dry_run のときはスキップ）
-    out = signals[["Code", "Date", "up_probability", "signal", "predicted_at", "explanation", "key_factors"]]
+    out = to_save[["Code", "Date", "up_probability", "signal", "predicted_at", "explanation", "key_factors"]]
     if dry_run:
-        print(f"[DRY RUN] Would save {len(signals)} signals (UP: {up_count}, DOWN: {down_count})")
+        print(f"[DRY RUN] Would save {len(out)} rows (UP: {up_count}, DOWN: {down_count}, NEUTRAL: {len(neutral)})")
     else:
         out.to_sql("predictions", engine, if_exists="append", index=False)
-        print(f"Saved {len(signals)} signals (UP: {up_count}, DOWN: {down_count})")
+        print(f"Saved {len(out)} rows (UP: {up_count}, DOWN: {down_count}, NEUTRAL: {len(neutral)})")
 
     if OPENAI_API_KEY:
         print("LLM explanations generated.")

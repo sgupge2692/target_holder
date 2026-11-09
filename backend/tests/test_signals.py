@@ -269,3 +269,33 @@ async def test_latest_includes_change_from_previous_prediction(client, db_sessio
     assert a["signal_changed"] is True and a["prev_signal"] == "DOWN"
     b = by_code["2002"]
     assert b["prob_change_pt"] is None and b["signal_changed"] is None
+
+
+@pytest.mark.asyncio
+async def test_neutral_rows_are_stored_but_not_listed_or_counted(client, db_session):
+    """NEUTRAL は保存されるが、一覧・履歴・的中率には出ない。前日UPで今日NEUTRALなら一覧から消える"""
+    from sqlalchemy import text
+
+    rows = [
+        ("1001", "2026-11-05", 0.62, "UP", 0.01, 1),     # 前日 UP（的中）
+        ("1001", "2026-11-06", 0.51, "NEUTRAL", 0.02, 1),  # 今日は中立 → 一覧に古い UP を残さない
+        ("1002", "2026-11-06", 0.63, "UP", 0.01, 1),
+        ("1003", "2026-11-06", 0.50, "NEUTRAL", 0.03, 1),
+    ]
+    for code, d, p, sg, ex, ok in rows:
+        await db_session.execute(text(
+            'INSERT INTO predictions ("Code","Date",up_probability,signal,actual_return,excess_return,is_correct) '
+            "VALUES (:c,:d,:p,:s,:a,:e,:ok)"), {"c": code, "d": d, "p": p, "s": sg, "a": ex, "e": ex, "ok": ok})
+    await db_session.commit()
+
+    token = await _get_token(client, "neutral@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    latest = (await client.get("/api/signals/latest", headers=headers)).json()
+    assert [s["Code"] for s in latest["signals"]] == ["1002"]
+    assert latest["total_available"] == 1
+
+    hist = (await client.get("/api/signals/history/1001", headers=headers)).json()["history"]
+    assert [h["signal"] for h in hist] == ["UP"]
+
+    acc = (await client.get("/api/signals/accuracy")).json()["accuracy"]
+    assert [a["signal"] for a in acc] == ["UP"] and acc[0]["total"] == 2

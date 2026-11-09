@@ -234,7 +234,7 @@ export const regenerateSummary = (code: string, text: string, year_label: string
 
 export interface WatchlistItem {
   code: string; company_name: string | null; created_at: string;
-  signal: "UP" | "DOWN" | null; up_probability: number | null;
+  signal: "UP" | "DOWN" | "NEUTRAL" | null; up_probability: number | null;
   is_correct: boolean | null; signal_date: string | null;
   latest_price: number | null;
   prev_signal?: string | null;         // 前回のシグナル

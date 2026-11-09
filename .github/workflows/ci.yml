@@ -152,7 +152,9 @@ jobs:
           cache: pip
 
       - name: Install lint tools + test deps
-        run: pip install ruff pytest numpy pandas scikit-learn
+        run: |
+          pip install ruff pytest pytest-asyncio
+          pip install -r ml/requirements.txt
 
       - name: Lint ML pipeline
         run: |
@@ -162,4 +164,53 @@ jobs:
         env:
           DATABASE_URL: "sqlite:////:memory:"
         run: |
-          pytest ml/tests/ -v --tb=short || true
+          # 失敗を握りつぶさない（以前は || true で、テストが壊れていても CI が通っていた）
+          pytest ml/tests/ -v --tb=short
+
+  # ── パイプライン E2E（合成データ → 特徴量 → 学習 → 予測 → 実績記録 → API） ─────────
+  # 各工程の単体テストでは見つからない、工程間の列名・型・受け渡しの食い違いを検出する
+  e2e-pipeline:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install pytest pytest-asyncio
+          pip install -r ml/requirements.txt
+          # openai は ml 側の新しい版（>=1.52）を使う
+          grep -v '^openai' backend/requirements.txt > /tmp/backend-requirements.txt
+          pip install -r /tmp/backend-requirements.txt
+
+      - name: Run E2E pipeline test
+        env:
+          TEST_POSTGRES_URL: "postgresql://postgres:postgres@localhost:5432/e2e"
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          JWT_SECRET: test-secret
+          STRIPE_SECRET_KEY: sk_test_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_dummy
+          STRIPE_PRICE_ID_PRO: price_dummy
+          TESTING: "1"
+        run: |
+          pytest ml/tests/test_e2e_pipeline.py -v --tb=short

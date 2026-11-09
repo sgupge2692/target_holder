@@ -76,7 +76,7 @@ async def get_stats(
                   * 100, 1
                 ) as up_accuracy
             FROM predictions
-            WHERE predicted_at >= NOW() - INTERVAL '30 days'
+            WHERE predicted_at >= NOW() - INTERVAL '30 days' AND signal IN ('UP', 'DOWN')
         """)
     )
     sig = signal_stats_r.fetchone()
@@ -174,7 +174,7 @@ async def daily_signal_stats(
                   * 100, 1
                 ) as accuracy_pct
             FROM predictions
-            WHERE predicted_at >= NOW() - (:days || ' days')::interval
+            WHERE predicted_at >= NOW() - (:days || ' days')::interval AND signal IN ('UP', 'DOWN')
             GROUP BY 1 ORDER BY 1 DESC
         """),
         {"days": days},

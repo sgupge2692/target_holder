@@ -70,7 +70,7 @@ async def get_latest_signals(
 
     # 各銘柄の最新シグナルを1件取得（PostgreSQL / SQLite 両対応）
     # ※ フィルタは AND で連結する（WHERE の二重指定は構文エラーになる）
-    signal_clause = "AND p.signal = :signal" if signal else ""
+    signal_clause = "AND p.signal = :signal" if signal else "AND p.signal IN ('UP', 'DOWN')"
     params: dict = {}
     if signal:
         params["signal"] = signal
@@ -135,7 +135,7 @@ async def get_signal_history(
         SELECT "Code", "Date", signal, up_probability, actual_return, excess_return, is_correct,
                explanation, key_factors, predicted_at
         FROM predictions
-        WHERE "Code" = :code
+        WHERE "Code" = :code AND signal IN ('UP', 'DOWN')
         ORDER BY "Date" DESC
         LIMIT :limit
     """), {"code": code, "limit": limit})
@@ -154,8 +154,9 @@ async def export_signals_csv(
     if current_user.plan != "pro":
         raise HTTPException(status_code=403, detail="CSV エクスポートは Pro プラン限定です")
 
-    where_parts = ['"Date" >= date(\'now\', \'-\' || :days || \' days\')']
-    params: dict = {"days": days}
+    # 日付関数は DB 依存（SQLite の date('now', ...) は PostgreSQL に無い）ので Python 側で計算する
+    where_parts = ['p."Date" >= :cutoff', "p.signal IN ('UP', 'DOWN')"]
+    params: dict = {"cutoff": date.today() - timedelta(days=days)}
     if signal:
         where_parts.append("p.signal = :signal")
         params["signal"] = signal
@@ -181,7 +182,7 @@ async def export_signals_csv(
     writer = csv.writer(output)
     writer.writerow([
         "コード", "銘柄名", "シグナル日", "シグナル",
-        "上昇確率(%)", "実績リターン(%)", "的中",
+        "市場を上回る確率(%)", "実績リターン(%)", "的中",
         "AI説明", "予測日時",
     ])
     for r in rows:
@@ -221,7 +222,7 @@ async def get_accuracy(db: AsyncSession = Depends(get_db)):
             ) AS accuracy_pct,
             ROUND(AVG(actual_return) * 100, 4) AS avg_return_pct
         FROM predictions
-        WHERE actual_return IS NOT NULL
+        WHERE actual_return IS NOT NULL AND signal IN ('UP', 'DOWN')
         GROUP BY signal
         ORDER BY signal
     """))
@@ -274,7 +275,7 @@ async def get_backtest_chart(
             ROUND(AVG(actual_return) * 100, 3)                                 AS avg_return_pct,
             ROUND(AVG(excess_return) * 100, 3)                                 AS avg_excess_pct
         FROM predictions
-        WHERE actual_return IS NOT NULL
+        WHERE actual_return IS NOT NULL AND signal IN ('UP', 'DOWN')
           AND "Date" >= :cutoff
         GROUP BY substr(CAST("Date" AS TEXT), 1, 7), signal
         ORDER BY month ASC, signal
@@ -335,7 +336,7 @@ async def get_backtest_chart(
             ROUND(AVG(actual_return) * 100, 3)                                 AS avg_return_pct,
             ROUND(AVG(excess_return) * 100, 3)                                 AS avg_excess_pct
         FROM predictions
-        WHERE actual_return IS NOT NULL
+        WHERE actual_return IS NOT NULL AND signal IN ('UP', 'DOWN')
         GROUP BY signal
         ORDER BY signal
     """))
