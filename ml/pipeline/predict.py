@@ -159,7 +159,7 @@ def get_top_features(model, feature_values: dict, n: int = 5, feat_cols: list | 
         if val is None or (isinstance(val, float) and np.isnan(val)):
             continue
         label = FEATURE_LABELS.get(name, name)
-        result.append({"name": name, "label": label, "importance": float(imp), "value": float(val)})
+        result.append({"name": name, "feature": name, "label": label, "importance": float(imp), "value": float(val)})
     return result
 
 
