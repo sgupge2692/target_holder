@@ -152,15 +152,25 @@ curl https://your-domain.com/api/signals/accuracy
 
 ---
 
-## 9. cron スクリプト動作確認
+## 9. 日次パイプラインの動作確認
+
+日次の自動実行は **GitHub Actions の `daily_pipeline.yml` 1本**に統一している（毎営業日 17:30 JST）。
+VPS に **self-hosted runner** を入れておく必要がある（Settings → Actions → Runners → New self-hosted runner）。
+
+実行順: データ取得 → ニュース収集 → 特徴量計算 → 逐次学習 → 予測 → 前日実績記録 → 日次メール → X 投稿。
+毎週土曜 01:00 JST に `weekly_retrain.yml` がフル再学習を行う（日次と同時には動かない）。
 
 ```bash
-# cron コンテナのログ確認
-docker compose -f docker-compose.yml -f docker-compose.prod.yml logs cron
-
-# 手動でシグナル送信スクリプトをテスト
-docker compose exec cron python /scripts/send_daily_signals.py
+# 初回は手動で1回通す（Actions → Daily ML Pipeline → Run workflow）。VPS 上で個別に確認する場合:
+docker compose exec -T ml python pipeline/fetch_data.py --test        # 主要20銘柄のみ
+docker compose exec -T ml python pipeline/predict.py --dry-run
+docker compose exec -T -e PYTHONPATH=/app backend python /scripts/send_daily_signals.py --dry-run
+docker compose exec -T -e PYTHONPATH=/app backend python /scripts/post_twitter.py --dry-run
 ```
+
+- `ml` コンテナは `sleep infinity` で待機させている（`docker compose exec` で各スクリプトを実行するため）。
+- 失敗の通知は Slack（`SLACK_WEBHOOK_URL` を Secrets に入れたとき）。未設定でも Actions のログに残る。
+- 古いシグナル（4日超）のときは、メール・X は送らずに正常終了する。
 
 ---
 

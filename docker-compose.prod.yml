@@ -29,6 +29,7 @@ services:
     # 開発用ボリュームマウントを外す
     volumes:
       - ml_models:/app/models:ro
+      - ./scripts:/scripts:ro      # 日次メール・X投稿（daily_pipeline.yml が exec で実行）
     ports: []
     env_file:
       - .env
@@ -71,6 +72,9 @@ services:
 
   ml:
     restart: unless-stopped
+    # 日次パイプライン（GitHub Actions の daily_pipeline.yml）が `docker compose exec` で実行する。
+    # イメージの既定 CMD は fetch_data.py を1回実行して終了するため、そのままだと exec できず、再起動も繰り返す。
+    command: ["sleep", "infinity"]
     volumes:
       - ml_models:/app/models
     ports: []
@@ -87,41 +91,6 @@ services:
         limits:
           memory: 2G
 
-  # ── cron ワーカー（ML スクリプト & メール通知）────────────────────────
-  cron:
-    build:
-      context: ./ml
-      dockerfile: Dockerfile
-    container_name: stock_cron
-    restart: unless-stopped
-    command: >
-      sh -c "
-        echo '45 18 * * 1-5 cd /app && python /scripts/send_daily_signals.py >> /var/log/send_signals.log 2>&1' > /etc/crontabs/root &&
-        echo '50 18 * * 1-5 cd /app && python /scripts/post_twitter.py >> /var/log/post_twitter.log 2>&1' >> /etc/crontabs/root &&
-        echo '0  6  * * 1-5 cd /app && python pipeline/fetch_data.py >> /var/log/fetch_data.log 2>&1' >> /etc/crontabs/root &&
-        echo '30 6  * * 1-5 cd /app && python pipeline/train.py >> /var/log/train.log 2>&1' >> /etc/crontabs/root &&
-        echo '0  8  * * 1-5 cd /app && python pipeline/predict.py >> /var/log/predict.log 2>&1' >> /etc/crontabs/root &&
-        crond -f -l 6
-      "
-    volumes:
-      - ml_models:/app/models
-      - ./scripts:/scripts:ro
-      - cron_logs:/var/log
-    env_file:
-      - .env
-    environment:
-      ENV: production
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-
-  # ── Nginx リバースプロキシ ──────────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
     container_name: stock_nginx
@@ -162,6 +131,5 @@ volumes:
   db_data:
   redis_data:
   ml_models:
-  cron_logs:
   certbot_www:
   certbot_conf:
