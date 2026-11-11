@@ -88,6 +88,21 @@ jobs:
           cd backend
           python -m pytest tests/test_postgres_queries.py -v --tb=short
 
+      # 新しい DB の構築手順（init.sql → alembic upgrade head）が通ること。
+      # init.sql と migration に同じ列・テーブルがあると「既に存在する」で失敗するため（実際に 0011 で起きた）。
+      - name: Migrations on a fresh database
+        env:
+          PGPASSWORD: postgres
+          DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/migrations"
+          JWT_SECRET: test-secret
+        run: |
+          createdb -h localhost -U postgres migrations
+          grep -v -e "CREATE EXTENSION" -e "create_hypertable" db/init.sql \
+            | psql -h localhost -U postgres -d migrations -v ON_ERROR_STOP=1 -q
+          cd backend
+          alembic upgrade head
+          alembic current | grep "(head)"
+
   # ── フロントエンド ビルド ────────────────────────────────────────────
   frontend-build:
     runs-on: ubuntu-latest
@@ -130,14 +145,14 @@ jobs:
 
       - name: Install deps
         run: |
-          pip install pytest pytest-asyncio
+          pip install pytest pytest-asyncio numpy pandas
           pip install "sqlalchemy[asyncio]" asyncpg aiopg aiosqlite python-dotenv greenlet
 
       - name: Run script unit tests
         env:
           DATABASE_URL: postgresql+asyncpg://dummy:dummy@localhost/dummy
         run: |
-          pytest scripts/test_send_daily_signals.py -v --tb=short -k "not asyncio_main"
+          pytest scripts/test_send_daily_signals.py scripts/test_demo_data.py -v --tb=short -k "not asyncio_main"
 
   # ── ML パイプライン lint + tests ─────────────────────────────────────
   ml-lint:

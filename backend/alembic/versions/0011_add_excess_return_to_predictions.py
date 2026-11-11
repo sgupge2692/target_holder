@@ -8,7 +8,6 @@ Revises: 0010
 Create Date: 2026-11-08
 """
 from alembic import op
-import sqlalchemy as sa
 
 revision = "0011"
 down_revision = "0010"
@@ -17,10 +16,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("predictions", sa.Column("market_return", sa.Numeric(), nullable=True))
-    op.add_column("predictions", sa.Column("excess_return", sa.Numeric(), nullable=True))
+    # db/init.sql（新規構築時に最初に読み込まれる）にも同じ列があるため、IF NOT EXISTS で冪等にする。
+    # そうしないと、新しい DB で init.sql → alembic upgrade head の順に実行したときに
+    # 「列が既に存在する」で失敗する。
+    op.execute("ALTER TABLE predictions ADD COLUMN IF NOT EXISTS market_return NUMERIC")
+    op.execute("ALTER TABLE predictions ADD COLUMN IF NOT EXISTS excess_return NUMERIC")
 
 
 def downgrade() -> None:
-    op.drop_column("predictions", "excess_return")
-    op.drop_column("predictions", "market_return")
+    op.execute("ALTER TABLE predictions DROP COLUMN IF EXISTS excess_return")
+    op.execute("ALTER TABLE predictions DROP COLUMN IF EXISTS market_return")

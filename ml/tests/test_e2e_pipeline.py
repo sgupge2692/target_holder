@@ -24,12 +24,13 @@ PG_URL = os.getenv("TEST_POSTGRES_URL", "")
 pytestmark = pytest.mark.skipif(not PG_URL, reason="TEST_POSTGRES_URL 未設定（E2E は PostgreSQL 実機が必要）")
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "ml"))
+from pipeline.synthetic_data import SECTORS  # noqa: E402
 PIPELINE = ROOT / "ml" / "pipeline"
 
 N_STOCKS = 60
 N_DAYS = 420            # 営業日。ウォークフォワードCV（5分割）に足りる長さ
 EXTRA_DAYS = 3          # 予測後に追加して、実績記録（backtest）を試す日数
-SECTORS = ["3650", "7050", "3250", "5250", "3700", "6100"]
 
 
 def _sync_url(url: str) -> str:
@@ -52,27 +53,8 @@ def _schema_sql() -> str:
 
 
 def _synthetic_quotes(dates: pd.DatetimeIndex) -> pd.DataFrame:
-    """市場共通の動き + 業種の動き + 銘柄固有の動き。直近の値動きが翌日にわずかに効く弱い構造を入れる。"""
-    rng = np.random.default_rng(42)
-    market = rng.normal(0.0003, 0.008, len(dates))
-    sector_move = {s: rng.normal(0, 0.005, len(dates)) for s in SECTORS}
-    rows = []
-    for k in range(N_STOCKS):
-        code = f"{1300 + k * 7}"
-        sector = SECTORS[k % len(SECTORS)]
-        idio = rng.normal(0, 0.012, len(dates))
-        ret = market + sector_move[sector] + idio
-        ret[1:] += 0.05 * ret[:-1]              # 弱いモメンタム
-        close = 1000 * (1 + k % 5) * np.cumprod(1 + ret)
-        for i, d in enumerate(dates):
-            c = float(close[i])
-            hi, lo = c * (1 + abs(rng.normal(0, 0.006))), c * (1 - abs(rng.normal(0, 0.006)))
-            rows.append({
-                "Code": code, "Date": d.date(), "Open": round((hi + lo) / 2, 1), "High": round(hi, 1),
-                "Low": round(lo, 1), "Close": round(c, 1), "Volume": int(rng.integers(100_000, 5_000_000)),
-                "AdjustmentClose": round(c, 1), "sector": sector, "name": f"合成銘柄{k}",
-            })
-    return pd.DataFrame(rows)
+    from pipeline.synthetic_data import synthetic_quotes
+    return synthetic_quotes(dates, N_STOCKS)
 
 
 def _run(script: str, args: list[str], env: dict, timeout: int = 900) -> str:
