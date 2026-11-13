@@ -23,6 +23,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 0.8,
     },
+    {
+      url: `${site}/battle`,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.75,
+    },
     ...["terms", "privacy", "legal"].map((path) => ({
       url: `${site}/${path}`,
       lastModified: now,
