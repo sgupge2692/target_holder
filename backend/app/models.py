@@ -128,3 +128,19 @@ class AssetSnapshot(Base):
     amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)  # 残高（負債は正の値で保存し category で判断）
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class BattlePick(Base):
+    """予想バトル: ユーザーの「市場平均より上/下」予想。AIの予想・結果は predictions を prediction_id で参照する"""
+    __tablename__ = "battle_picks"
+    __table_args__ = (
+        UniqueConstraint("user_id", "prediction_id", name="uq_battle_user_prediction"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    prediction_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)  # predictions.id（出題時点のAI予測）
+    code: Mapped[str] = mapped_column(String(10), nullable=False)
+    round_date: Mapped[str] = mapped_column(String(10), nullable=False)             # predictions."Date"（YYYY-MM-DD）
+    pick: Mapped[str] = mapped_column(String(4), nullable=False)                    # UP / DOWN
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Moon, Sun, BarChart2, Bookmark, User, ShieldCheck, Wallet, Menu, X, TrendingUp, FlaskConical } from "lucide-react";
+import { Moon, Sun, BarChart2, Bookmark, User, ShieldCheck, Wallet, Menu, X, TrendingUp, FlaskConical, Swords } from "lucide-react";
 
 function NavLink({ href, children, onClick }: { href: string; children: React.ReactNode; onClick?: () => void }) {
   const pathname = usePathname();
@@ -92,6 +92,9 @@ export function Navbar() {
               <>
                 <NavLink href="/">シグナル</NavLink>
                 <NavLink href="/sectors">業種別</NavLink>
+                <NavLink href="/battle">
+                  <span className="flex items-center gap-1"><Swords size={11} />バトル</span>
+                </NavLink>
                 <NavLink href="/backtest">バックテスト</NavLink>
                 <NavLink href="/watchlist">
                   <span className="flex items-center gap-1.5"><Bookmark size={12} />ウォッチ</span>
@@ -213,6 +216,7 @@ export function Navbar() {
             <>
               <DrawerLink href="/" icon={<BarChart2 size={15} />} label="シグナル" onClick={closeDrawer} />
               <DrawerLink href="/sectors" icon={<BarChart2 size={15} />} label="業種別" onClick={closeDrawer} />
+              <DrawerLink href="/battle" icon={<Swords size={15} />} label="予想バトル" onClick={closeDrawer} />
               <DrawerLink href="/backtest" icon={<BarChart2 size={15} />} label="バックテスト" onClick={closeDrawer} />
               <DrawerLink href="/paper" icon={<FlaskConical size={15} />} label="模擬売買" onClick={closeDrawer} />
               <DrawerLink href="/watchlist" icon={<Bookmark size={15} />} label="ウォッチリスト" onClick={closeDrawer} />

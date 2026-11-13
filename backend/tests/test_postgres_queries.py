@@ -237,3 +237,38 @@ async def test_watchlist_change_runs_on_postgres(pg_client):
     item = res.json()["watchlist"][0]
     assert item["prev_signal"] == "NEUTRAL" and item["signal_changed"] is True
     assert item["prob_change_pt"] == pytest.approx(16.0, abs=0.1) and isinstance(item["prob_change_pt"], float)
+
+
+# ── 予想バトル（DATE 型の比較は SQLite だと通ってしまうため PostgreSQL でも確認する） ──────────
+
+@pytest.mark.asyncio
+async def test_battle_flow_runs_on_postgres(pg_client):
+    async with pg_client.session_factory() as s:
+        for k in range(8):
+            await s.execute(text("INSERT INTO listed_stocks (code, company_name, sector_code) VALUES (:c, :n, '3650')"),
+                            {"c": f"{2000 + k}", "n": f"銘柄{k}"})
+            await s.execute(text("""
+                INSERT INTO predictions ("Code","Date",up_probability,signal)
+                VALUES (:c, :d, :p, :sg)
+            """), {"c": f"{2000 + k}", "d": date(2026, 11, 10), "p": 0.6 if k % 2 == 0 else 0.4,
+                   "sg": "UP" if k % 2 == 0 else "DOWN"})
+        await s.commit()
+    token = await _register(pg_client, "battle_pg@example.com")
+    h = {"Authorization": f"Bearer {token}"}
+
+    today = await pg_client.get("/api/battle/today", headers=h)
+    assert today.status_code == 200, today.text
+    stocks = today.json()["stocks"]
+    assert today.json()["round_date"] == "2026-11-10" and len(stocks) == 5
+
+    res = await pg_client.post("/api/battle/pick", json={"code": stocks[0]["code"], "pick": "UP"}, headers=h)
+    assert res.status_code == 201, res.text
+    assert (await pg_client.post("/api/battle/pick", json={"code": stocks[0]["code"], "pick": "DOWN"}, headers=h)).status_code == 409
+
+    async with pg_client.session_factory() as s:
+        await s.execute(text("UPDATE predictions SET excess_return = 0.01"))
+        await s.commit()
+    me = await pg_client.get("/api/battle/me", headers=h)
+    assert me.status_code == 200, me.text
+    assert me.json()["summary"]["settled"] == 1 and me.json()["recent"][0]["user_correct"] is True
+    assert (await pg_client.get("/api/battle/leaderboard")).status_code == 200

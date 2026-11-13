@@ -333,3 +333,86 @@ export const closePaperTrade = (id: number, exit_price: number, exit_date: strin
 
 export const deletePaperTrade = (id: number) =>
   apiFetch<void>(`/api/paper-trades/${id}`, { method: "DELETE" });
+
+// ── 予想バトル ──────────────────────────────────────────────
+
+export interface BattleStock {
+  code: string;
+  company_name: string | null;
+  sector_code: string | null;
+  close: number | null;
+  change_5d_pct: number | null;
+  my_pick: "UP" | "DOWN" | null;
+}
+
+export interface BattleToday {
+  round_date: string | null;
+  closed: boolean;
+  stocks: BattleStock[];
+  answered: number;
+  round_size: number;
+  disclaimer: string;
+}
+
+export interface BattleDuel {
+  code: string;
+  company_name: string | null;
+  round_date: string;
+  pick: "UP" | "DOWN";
+  settled: boolean;
+  ai_signal: "UP" | "DOWN" | null;
+  ai_up_probability: number | null;
+  excess_return_pct: number | null;
+  user_correct: boolean | null;
+  ai_correct: boolean | null;
+  outcome: "win" | "lose" | "draw" | null;
+}
+
+export interface BattleSummary {
+  settled: number;
+  pending: number;
+  user_correct: number;
+  user_win_rate: number | null;
+  ai_correct: number;
+  ai_win_rate: number | null;
+  duel_wins: number;
+  duel_losses: number;
+  duel_draws: number;
+  current_streak: number;
+  best_streak: number;
+  title: string;
+  title_needs: number;
+}
+
+export interface BattleMe {
+  summary: BattleSummary;
+  recent: BattleDuel[];
+  handle: string;
+  disclaimer: string;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  handle: string;
+  settled: number;
+  wins: number;
+  win_rate: number;
+  current_streak: number;
+  best_streak: number;
+}
+
+export interface Leaderboard {
+  entries: LeaderboardEntry[];
+  min_picks: number;
+  note: string;
+  disclaimer: string;
+}
+
+export const getBattleToday = () => apiFetch<BattleToday>("/api/battle/today");
+export const getBattleMe = () => apiFetch<BattleMe>("/api/battle/me");
+export const getLeaderboard = () => apiFetch<Leaderboard>("/api/battle/leaderboard");
+export const postBattlePick = (code: string, pick: "UP" | "DOWN") =>
+  apiFetch<{ code: string; pick: string; round_date: string }>("/api/battle/pick", {
+    method: "POST",
+    body: JSON.stringify({ code, pick }),
+  });
