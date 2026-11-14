@@ -240,3 +240,66 @@ async def test_leaderboard_hides_users_with_few_picks(client, db_session):
     await db_session.execute(text("UPDATE predictions SET excess_return = 0.01"))
     await db_session.commit()
     assert (await client.get("/api/battle/leaderboard")).json()["entries"] == []
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_returns_same_result_via_cache(client, db_session, monkeypatch):
+    """1回目の結果が cache_set で保存され、2回目はキャッシュ経由で同じ結果を返す"""
+    await _seed(db_session, n=8)
+    h = await _token(client, "b_cache@example.com")
+    # 10 日分の出題に全部答えて確定させる（ランキングに載る最低数）
+    for day in range(1, 11):
+        d = f"2026-10-{day:02d}"
+        await _seed_day(db_session, d)
+        await db_session.execute(text('DELETE FROM predictions WHERE "Date" > :d'), {"d": d})
+        await db_session.commit()
+        s = (await _round_codes(client, h))["stocks"][0]
+        assert (await client.post("/api/battle/pick", json={"code": s["code"], "pick": "UP"}, headers=h)).status_code == 201, d
+        await db_session.execute(text('UPDATE predictions SET excess_return = 0.01 WHERE "Date" = :d'), {"d": d})
+        await db_session.commit()
+
+    # Redis が無い環境でもキャッシュ経路を試せるよう、in-memory のフェイクに差し替え
+    store: dict[str, dict] = {}
+    set_keys: list[str] = []
+
+    async def fake_cache_get(key):
+        return store.get(key)
+
+    async def fake_cache_set(key, value, ttl=300):
+        set_keys.append(key)
+        store[key] = value
+        return True
+
+    monkeypatch.setattr(b, "cache_get", fake_cache_get)
+    monkeypatch.setattr(b, "cache_set", fake_cache_set)
+
+    first = (await client.get("/api/battle/leaderboard")).json()
+    assert set_keys == [b.cache_key("battle", "leaderboard")]     # 1回目でキャッシュに保存される
+    assert len(first["entries"]) == 1 and first["entries"][0]["settled"] == 10
+
+    # 再計算すれば結果が変わる状態にしてから 2 回目 → キャッシュ経由で 1 回目と同じ結果
+    await db_session.execute(text("UPDATE predictions SET excess_return = 0.9"))
+    await db_session.commit()
+    second = (await client.get("/api/battle/leaderboard")).json()
+    assert second == first
+
+
+@pytest.mark.asyncio
+async def test_today_returns_my_pick_after_closed(client, db_session):
+    """締め切り後も /today は自分の回答（my_pick）を正しく返す"""
+    await _seed(db_session)
+    h = await _token(client, "b_closed_pick@example.com")
+    data = await _round_codes(client, h)
+    assert data["closed"] is False
+    targets = {s["code"] for s in data["stocks"][:2]}
+    for code in targets:
+        assert (await client.post("/api/battle/pick", json={"code": code, "pick": "UP"}, headers=h)).status_code == 201
+
+    # 出題日の結果が確定 → 締め切り。以後 /today でも自分の回答が見えること
+    await db_session.execute(text("UPDATE predictions SET excess_return = 0.01"))
+    await db_session.commit()
+    after = await _round_codes(client, h)
+    assert after["closed"] is True
+    assert after["answered"] == 2
+    for s in after["stocks"]:
+        assert s["my_pick"] == ("UP" if s["code"] in targets else None)
