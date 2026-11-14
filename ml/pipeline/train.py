@@ -51,7 +51,8 @@ CONFIDENCE = 0.60     # predict.py の CONFIDENCE_THRESHOLD と揃える
 TARGET_COL = "label_excess"
 FALLBACK_TARGET_COL = "label"
 RETURN_COL = "excess_return"
-os.makedirs(MODEL_DIR, exist_ok=True)
+# makedirs はモジュールレベルではなく実際にモデルを保存するときだけ行う。
+# import 時に /app が存在しない環境（CI など）でも問題が起きないようにするため。
 
 # ── 特徴量リスト（feature_engineering.py と同期） ────────────────
 FEATURE_COLS = [
@@ -222,6 +223,7 @@ def _mean_metric(rows: list, key: str) -> float:
 
 def _calibrate_and_save(oof_prob: list, oof_y: list, oof_fold: list) -> dict:
     """OOF 予測から確率校正器を作って保存し、検証指標を返す。"""
+    os.makedirs(MODEL_DIR, exist_ok=True)
     params, m = calibration_report(
         np.concatenate(oof_prob), np.concatenate(oof_y), np.concatenate(oof_fold),
     )
@@ -284,6 +286,7 @@ def train_full(df: pd.DataFrame, params: dict = None):
     model = LGBMClassifier(**final_params)
     model.fit(X_scaled, y, callbacks=[log_evaluation(-1)])
 
+    os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(model,  f"{MODEL_DIR}/lgbm_model.pkl")
     joblib.dump(scaler, f"{MODEL_DIR}/scaler.pkl")
     joblib.dump(feat_cols, f"{MODEL_DIR}/feature_cols.pkl")
@@ -385,6 +388,7 @@ def train_ensemble(df: pd.DataFrame):
     # predict.py 互換のため重みは保存する（現状は等重み）
     w_lgbm, w_xgb = 0.5, 0.5
 
+    os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(final_lgbm, f"{MODEL_DIR}/lgbm_model.pkl")
     joblib.dump(final_xgb,  f"{MODEL_DIR}/xgb_model.pkl")
     joblib.dump(scaler,     f"{MODEL_DIR}/scaler.pkl")
@@ -432,6 +436,7 @@ def train_incremental(df: pd.DataFrame):
 
     X_scaled = scaler.transform(X)
     model.fit(X_scaled, y, init_model=model)
+    os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(model, f"{MODEL_DIR}/lgbm_model.pkl")
     print("Incremental update done.")
 
@@ -491,6 +496,7 @@ def tune_and_train(df: pd.DataFrame):
 
     best_params = {**DEFAULT_LGBM_PARAMS, **study.best_params}
     print(f"\nBest AUC: {study.best_value:.4f}")
+    os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(best_params, f"{MODEL_DIR}/best_params.pkl")
     train_full(df, params=best_params)
 
