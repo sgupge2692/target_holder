@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: チェックアウト
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 全データ取得（過去2年分）
         run: docker compose exec -T ml python pipeline/fetch_data.py --full
