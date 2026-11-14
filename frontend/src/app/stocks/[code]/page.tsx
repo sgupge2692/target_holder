@@ -4,12 +4,13 @@ import { useState, useEffect } from "react";
 import useSWR, { mutate } from "swr";
 import Link from "next/link";
 import {
-  getStock, getQuotes, getSignalHistory, getSummary, generateSummary, regenerateSummary,
+  getStock, getQuotes, getSignalHistory, getPeers, getSummary, generateSummary, regenerateSummary,
   getWatchlistStatus, addToWatchlist, removeFromWatchlist, type Summary,
 } from "@/lib/api";
 import { SignalBadge } from "@/components/SignalBadge";
 import { SummaryCard } from "@/components/SummaryCard";
 import { StockChart } from "@/components/StockChart";
+import { PeersCard } from "@/components/PeersCard";
 import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, Lock, Star, TrendingUp, TrendingDown, Crown } from "lucide-react";
 
@@ -40,6 +41,7 @@ export default function StockPage() {
   const { data: stock }   = useSWR(`stock:${code}`,   () => getStock(code));
   const { data: quotes }  = useSWR(user ? `quotes:${code}` : null, () => getQuotes(code));
   const { data: history } = useSWR(user ? `hist:${code}` : null, () => getSignalHistory(code));
+  const { data: peers }   = useSWR(user ? `peers:${code}` : null, () => getPeers(code));
   const { data: watchStatus, mutate: mutateWatch } = useSWR(
     user ? `watch:${code}` : null,
     () => getWatchlistStatus(code),
@@ -174,6 +176,9 @@ export default function StockPage() {
           <p className="text-center text-slate-500 py-12 text-sm">データなし</p>
         )}
       </div>
+
+      {/* 同業種内の位置づけ */}
+      {user && peers && <PeersCard peers={peers} />}
 
       {/* 四季報 LLM 要約 */}
       {user && (

@@ -15,9 +15,14 @@ cd target_holder
 cp .env.example .env
 docker compose up --build -d
 
-# 3. デモデータを投入
-docker compose run --rm backend python scripts/seed_demo.py
+# 3. デモデータを投入（合成データで本物の予測パイプラインを回す。数分かかる）
+pip install -r ml/requirements.txt
+DATABASE_URL=postgresql://<DB_USER>:<DB_PASSWORD>@localhost:5432/<DB_NAME> \
+  python scripts/demo_data.py --yes                             # 予測履歴を作る（ホストから実行）
+docker compose run --rm backend python scripts/seed_demo.py     # デモユーザーと模擬取引
 ```
+
+> 実データが入っている DB や `ENV=production` では `demo_data.py` は実行を拒否する。
 
 ブラウザで **http://localhost:3000** を開き、以下でログイン：
 
@@ -27,7 +32,8 @@ docker compose run --rm backend python scripts/seed_demo.py
 | Password | `demo1234` |
 | プラン | Pro（全機能解放済み） |
 
-> デモデータには過去 60 日分のシグナル・的中履歴がセットで入る。
+> デモデータは合成データ（架空銘柄）で、本物の学習・予測・実績記録を日次で回した結果。
+> 的中率は 50% 前後になる（合成データに予測できる規則性を入れていないため。精度の宣伝には使わないこと）。
 
 ---
 

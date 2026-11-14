@@ -48,6 +48,9 @@ OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY", "")
 USE_LLM_SENTIMENT = bool(OPENAI_API_KEY) and os.getenv("NEWS_USE_LLM", "false").lower() == "true"
 NEWS_CACHE_TTL    = int(os.getenv("NEWS_CACHE_TTL_MINUTES", "30")) * 60  # 秒に変換
 
+# 取得の成否の集計（collect_news.py が「全部失敗していたのに成功扱い」にならないよう確認する）
+FETCH_STATS = {"ok": 0, "errors": 0}
+
 # ── メモリキャッシュ ──────────────────────────────────────────────────────
 _CACHE: dict[str, tuple[float, list[dict]]] = {}  # key → (timestamp, items)
 
@@ -152,8 +155,10 @@ def _fetch_rss(url: str, cache_key: str, max_items: int = 20) -> list[dict]:
             if len(items) >= max_items:
                 break
         _cache_set(cache_key, items)
+        FETCH_STATS["ok"] += 1
         return items
     except Exception as e:
+        FETCH_STATS["errors"] += 1
         print(f"[news] RSS fetch failed ({url[:60]}): {e}")
         return []
 
@@ -261,6 +266,31 @@ def llm_score(titles: list[str], code: str) -> float:
         return 0.0
 
 
+# ── 記事の収集（蓄積用） ───────────────────────────────────────────────────
+
+def collect_raw_articles(code: str, company_name: str, lookback_days: int = 3) -> list[dict]:
+    """
+    銘柄に関する記事を取得して返す（source つき・重複除去済み）。
+    学習用の特徴量は、ここで取った記事を DB に蓄積して作る（news_store.py / collect_news.py）。
+    """
+    from_str = (datetime.now(tz=JST) - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+    sources = [
+        ("yahoo",   fetch_yahoo_rss(company_name, max_items=20)),
+        ("yahoo",   fetch_yahoo_rss(code[:4], max_items=10)),
+        ("google",  fetch_google_news_rss(company_name, max_items=20)),
+        ("newsapi", fetch_newsapi(company_name, from_date=from_str, max_items=10)),
+    ]
+    seen: set[str] = set()
+    items: list[dict] = []
+    for source, fetched in sources:
+        for it in fetched:
+            key = (it.get("link") or it.get("title") or "")[:200]
+            if key and key not in seen:
+                seen.add(key)
+                items.append({**it, "source": source})
+    return items
+
+
 # ── メイン: 銘柄ごとのセンチメント ───────────────────────────────────────
 
 def get_news_sentiment(
@@ -270,7 +300,10 @@ def get_news_sentiment(
     lookback_days: int = 3,
 ) -> dict:
     """
-    指定銘柄のニュースセンチメント特徴量を返す。
+    指定銘柄の「いま」のニュースセンチメントを返す（画面表示・動作確認用）。
+
+    ※ 学習用の特徴量には使わない。過去の日付に今日の値を付けるとリークになるため、
+      学習用は news_store.build_point_in_time_features（蓄積した記事から時点ごとに作る）を使う。
 
     Returns:
         {

@@ -14,10 +14,15 @@ export default function AuthPage() {
   const [showPass, setShowP]  = useState(false);
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed]   = useState(false);
   const router = useRouter();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (mode === "register" && !agreed) {
+      setError("利用規約・プライバシーポリシーへの同意が必要です");
+      return;
+    }
     setError(""); setLoading(true);
     try {
       const fn = mode === "login" ? login : register;
@@ -102,6 +107,24 @@ export default function AuthPage() {
               <span className="shrink-0">⚠</span>
               {error}
             </div>
+          )}
+
+          {/* 規約への同意（新規登録のみ） */}
+          {mode === "register" && (
+            <label className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-400">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={e => setAgreed(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-teal-500"
+              />
+              <span>
+                <Link href="/terms" target="_blank" className="text-teal-400 underline">利用規約・免責事項</Link>
+                と
+                <Link href="/privacy" target="_blank" className="text-teal-400 underline">プライバシーポリシー</Link>
+                に同意します。シグナルは投資の勧誘・助言ではなく参考情報です。
+              </span>
+            </label>
           )}
 
           {/* 送信ボタン */}

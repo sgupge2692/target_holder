@@ -64,7 +64,9 @@ CREATE TABLE IF NOT EXISTS predictions (
     signal VARCHAR(10) NOT NULL,
     predicted_at TIMESTAMP DEFAULT NOW(),
     actual_return NUMERIC,  -- 後から実績を記録
-    is_correct BOOLEAN      -- 的中フラグ
+    market_return NUMERIC,  -- 同期間の全銘柄リターン中央値
+    excess_return NUMERIC,  -- actual_return - market_return
+    is_correct BOOLEAN      -- 的中フラグ（市場超過の符号で判定）
 );
 
 -- インデックス
@@ -72,3 +74,18 @@ CREATE INDEX IF NOT EXISTS idx_daily_quotes_code ON daily_quotes ("Code");
 CREATE INDEX IF NOT EXISTS idx_features_code ON features ("Code");
 CREATE INDEX IF NOT EXISTS idx_predictions_code ON predictions ("Code");
 CREATE INDEX IF NOT EXISTS idx_predictions_date ON predictions ("Date");
+
+-- ニュース記事（毎日収集して蓄積する。ニュース特徴量は「その時点で見られた記事」だけで作る）
+CREATE TABLE IF NOT EXISTS news_articles (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(10) NOT NULL,
+    url_hash VARCHAR(32) NOT NULL,
+    title TEXT NOT NULL,
+    source VARCHAR(30),
+    published_at TIMESTAMPTZ,
+    first_seen_at TIMESTAMPTZ NOT NULL,
+    score REAL NOT NULL DEFAULT 0,
+    urgency REAL NOT NULL DEFAULT 0,
+    UNIQUE (code, url_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_news_articles_code_seen ON news_articles (code, first_seen_at);

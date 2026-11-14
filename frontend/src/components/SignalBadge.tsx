@@ -1,7 +1,14 @@
 import { TrendingUp, TrendingDown } from "lucide-react";
 import clsx from "clsx";
 
-export function SignalBadge({ signal }: { signal: "UP" | "DOWN" }) {
+export function SignalBadge({ signal }: { signal: "UP" | "DOWN" | "NEUTRAL" }) {
+  if (signal === "NEUTRAL") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black tracking-wider uppercase bg-slate-200 text-slate-600 dark:bg-slate-700/40 dark:text-slate-400">
+        中立
+      </span>
+    );
+  }
   return (
     <span className={clsx(
       "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black tracking-wider uppercase",

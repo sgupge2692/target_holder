@@ -10,15 +10,38 @@ import { Bookmark, Trash2, TrendingUp, Search, Star, ArrowUpRight } from "lucide
 /** 確率バー（ミニ版） */
 function MiniProbBar({ prob }: { prob: number }) {
   const pct = Math.round(prob * 100);
-  const color = prob >= 0.8 ? "bg-teal-500" : prob >= 0.7 ? "bg-teal-400" : prob >= 0.6 ? "bg-amber-400" : "bg-slate-500";
+  const color = prob >= 0.6 ? "bg-teal-500" : prob >= 0.55 ? "bg-teal-400" : prob >= 0.5 ? "bg-amber-400" : "bg-slate-500";
   return (
     <div className="flex items-center gap-1.5 justify-end">
       <div className="prob-bar-track w-14">
         <div className={`prob-bar-fill ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className={`font-mono text-xs font-semibold w-[3rem] text-right ${prob >= 0.75 ? "text-teal-400" : "text-slate-400"}`}>
+      <span className={`font-mono text-xs font-semibold w-[3rem] text-right ${prob >= 0.55 ? "text-teal-400" : "text-slate-400"}`}>
         {pct.toFixed(1)}%
       </span>
+    </div>
+  );
+}
+
+const SIGNAL_LABEL: Record<string, string> = { UP: "強", DOWN: "弱", NEUTRAL: "中立" };
+
+/** 前回からの変化（シグナル反転と確率の増減）。変化が無ければ何も出さない */
+function ChangeBadge({ item }: { item: WatchlistItem }) {
+  const pt = item.prob_change_pt;
+  const showPt = pt != null && Math.abs(pt) >= 0.1;
+  if (!item.signal_changed && !showPt) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5 text-[10px]">
+      {item.signal_changed && item.prev_signal && item.signal && (
+        <span className="rounded px-1.5 py-0.5 font-black tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+          変化 {SIGNAL_LABEL[item.prev_signal] ?? item.prev_signal}→{SIGNAL_LABEL[item.signal] ?? item.signal}
+        </span>
+      )}
+      {showPt && pt != null && (
+        <span className="font-mono font-bold text-slate-500 dark:text-slate-400" title="前回の予測からの上昇確率の変化">
+          {pt > 0 ? "▲" : "▼"}{Math.abs(pt).toFixed(1)}pt
+        </span>
+      )}
     </div>
   );
 }
@@ -58,6 +81,7 @@ function WatchlistRow({ item, onRemove }: { item: WatchlistItem; onRemove: () =>
         {item.signal
           ? <SignalBadge signal={item.signal} />
           : <span className="text-slate-600 text-xs">なし</span>}
+        <ChangeBadge item={item} />
       </td>
       <td className="px-4 py-3.5">
         {item.up_probability != null
@@ -124,11 +148,13 @@ function WatchlistCard({ item, onRemove }: { item: WatchlistItem; onRemove: () =
         </div>
         {item.up_probability != null && (
           <div className="flex-1 max-w-[140px]">
-            <div className="text-[10px] font-black tracking-widest uppercase text-slate-500 mb-1 text-right">上昇確率</div>
+            <div className="text-[10px] font-black tracking-widest uppercase text-slate-500 mb-1 text-right">市場超過確率</div>
             <MiniProbBar prob={item.up_probability} />
           </div>
         )}
       </div>
+
+      <ChangeBadge item={item} />
 
       {item.signal_date && (
         <div className="mt-2 pt-2 border-t border-slate-700/40 text-xs text-slate-500 text-right font-mono">

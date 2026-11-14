@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
     stripe_price_id_pro: str = ""
+    stripe_price_id_pro_yearly: str = ""   # 年払い（未設定なら年払いは無効）
 
     openai_api_key: str = ""
 

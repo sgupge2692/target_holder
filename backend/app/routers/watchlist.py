@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import User, Watchlist
+from app.routers.signals import _add_change
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 
@@ -32,10 +33,18 @@ async def get_watchlist(
             w.code,
             w.company_name,
             w.created_at,
-            (SELECT signal       FROM predictions WHERE "Code" = w.code ORDER BY predicted_at DESC LIMIT 1) AS signal,
-            (SELECT up_probability FROM predictions WHERE "Code" = w.code ORDER BY predicted_at DESC LIMIT 1) AS up_probability,
-            (SELECT is_correct   FROM predictions WHERE "Code" = w.code ORDER BY predicted_at DESC LIMIT 1) AS is_correct,
-            (SELECT "Date"       FROM predictions WHERE "Code" = w.code ORDER BY predicted_at DESC LIMIT 1) AS signal_date,
+            (SELECT signal       FROM predictions WHERE "Code" = w.code ORDER BY "Date" DESC, id DESC LIMIT 1) AS signal,
+            (SELECT up_probability FROM predictions WHERE "Code" = w.code ORDER BY "Date" DESC, id DESC LIMIT 1) AS up_probability,
+            (SELECT is_correct   FROM predictions WHERE "Code" = w.code ORDER BY "Date" DESC, id DESC LIMIT 1) AS is_correct,
+            (SELECT "Date"       FROM predictions WHERE "Code" = w.code ORDER BY "Date" DESC, id DESC LIMIT 1) AS signal_date,
+            (SELECT p2.signal FROM predictions p2
+              WHERE p2."Code" = w.code
+                AND p2."Date" < (SELECT MAX(p3."Date") FROM predictions p3 WHERE p3."Code" = w.code)
+              ORDER BY p2."Date" DESC LIMIT 1) AS prev_signal,
+            (SELECT p2.up_probability FROM predictions p2
+              WHERE p2."Code" = w.code
+                AND p2."Date" < (SELECT MAX(p3."Date") FROM predictions p3 WHERE p3."Code" = w.code)
+              ORDER BY p2."Date" DESC LIMIT 1) AS prev_up_probability,
             (SELECT "Close"      FROM daily_quotes WHERE "Code" = w.code ORDER BY "Date" DESC LIMIT 1) AS latest_price,
             (SELECT "AdjustmentClose" FROM daily_quotes WHERE "Code" = w.code ORDER BY "Date" DESC LIMIT 1) AS adj_close
         FROM watchlist w
@@ -44,7 +53,8 @@ async def get_watchlist(
     """), {"uid": current_user.id})
 
     return {
-        "watchlist": [dict(r._mapping) for r in rows],
+        # 前回の予測からの確率変化・シグナル反転を付ける（一覧で「変わった銘柄」に気づけるように）
+        "watchlist": [_add_change(dict(r._mapping)) for r in rows],
         "plan": current_user.plan,
     }
 

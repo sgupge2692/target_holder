@@ -42,8 +42,21 @@ export const getMe = () => apiFetch<MeResponse>("/api/auth/me");
 
 // ── 課金 ─────────────────────────────────────────────────────
 
-export const createCheckout = () =>
-  apiFetch<{ url: string }>("/api/billing/checkout", { method: "POST" });
+export type BillingInterval = "month" | "year";
+
+export interface BillingPlans {
+  yearly_available: boolean;
+  monthly_amount: number | null;   // 円。Stripe の Price から取得（取得できなければ null）
+  yearly_amount: number | null;
+}
+
+export const getBillingPlans = () => apiFetch<BillingPlans>("/api/billing/plans");
+
+export const createCheckout = (interval: BillingInterval = "month") =>
+  apiFetch<{ url: string }>("/api/billing/checkout", {
+    method: "POST",
+    body: JSON.stringify({ interval }),
+  });
 
 export const createPortal = () =>
   apiFetch<{ url: string }>("/api/billing/portal", { method: "POST" });
@@ -62,16 +75,30 @@ export const getSubscription = () =>
 export interface Signal {
   Code: string; Date: string; signal: "UP" | "DOWN";
   up_probability: number; actual_return: number | null;
+  excess_return?: number | null;  // 市場平均（全銘柄の中央値）に対する超過リターン。的中判定はこちらの符号
   is_correct: boolean | null; company_name: string | null;
   explanation: string | null; key_factors: string | null;
+  prob_change_pt?: number | null;      // 前回予測からの上昇確率の変化（pt）。前回が無ければ null
+  prev_signal?: string | null;         // 前回のシグナル
+  signal_changed?: boolean | null;     // 前回からシグナルが変わったか
 }
 export interface AccuracyRow {
   signal: string; total: number; correct: number;
   accuracy_pct: number; avg_return_pct: number;
+  avg_excess_pct?: number;   // 市場平均（全銘柄の中央値）に対する平均超過リターン
+}
+
+export interface LatestSignalsResponse {
+  signals: Signal[];
+  plan: string;
+  total: number;            // 今回返した件数
+  total_available: number;  // 制限前の総件数（「あと○件」表示用）
+  is_limited: boolean;      // 無料プランの閲覧制限が効いているか
+  free_limit: number;       // 無料プランで閲覧できる件数
 }
 
 export const getLatestSignals = (signal?: "UP" | "DOWN") =>
-  apiFetch<{ signals: Signal[]; plan: string; total: number }>(
+  apiFetch<LatestSignalsResponse>(
     `/api/signals/latest${signal ? `?signal=${signal}` : ""}`
   );
 
@@ -88,15 +115,43 @@ export interface MonthlyAccuracy {
   up_accuracy?: number;   up_total?: number;   up_avg_return?: number;
   down_accuracy?: number; down_total?: number; down_avg_return?: number;
 }
-export interface CumulativeReturn { date: string; cumulative_return_pct: number }
+export interface CumulativeReturn {
+  date: string;
+  cumulative_return_pct: number;       // UPシグナル全件の平均超過リターンを日次で積み上げ
+  top_cumulative_return_pct: number;   // 各日の確度上位N件だけの同様の値
+}
+export interface BacktestMeta {
+  first_date: string | null; last_date: string | null;
+  days: number;   // 集計できた営業日数（実績の長さ）
+  top_k: number;
+}
 export interface BacktestChart {
   monthly: MonthlyAccuracy[];
   cumulative_return: CumulativeReturn[];
   overall: AccuracyRow[];
+  meta?: BacktestMeta;
 }
 
 export const getBacktestChart = (months = 12) =>
   apiFetch<BacktestChart>(`/api/signals/backtest/chart?months=${months}`);
+
+export interface SectorStrength {
+  sector_code: string;
+  sector_name: string;
+  stock_count: number;
+  avg_up_probability: number;
+  up_count: number;
+  down_count: number;
+}
+
+export interface SectorHeatmap {
+  date: string | null;
+  sectors: SectorStrength[];
+  min_stocks: number;
+}
+
+export const getSectorHeatmap = () =>
+  apiFetch<SectorHeatmap>("/api/signals/sectors");
 
 /** Pro 専用: シグナル CSV をダウンロード */
 export async function downloadSignalsCsv(signal?: "UP" | "DOWN", days = 30) {
@@ -134,6 +189,24 @@ export const getQuotes = (code: string) =>
     `/api/stocks/${code}/quotes`
   );
 
+export interface PeerStock {
+  code: string; company_name: string; signal: string; up_probability: number;
+}
+export interface PeersResponse {
+  code: string;
+  sector_code: string | null;
+  sector_name: string | null;
+  stock_count: number;                 // 業種内で予測がある銘柄数
+  rank: number | null;                 // 業種内の順位（市場を上回る確率が高い順）
+  up_probability: number | null;
+  avg_up_probability: number | null;   // 業種平均
+  peers: PeerStock[];                  // Pro のみ。同業種の上位銘柄（自分を除く）
+  peers_locked: boolean;
+}
+
+export const getPeers = (code: string) =>
+  apiFetch<PeersResponse>(`/api/stocks/${code}/peers`);
+
 // ── 四季報要約 ────────────────────────────────────────────────
 
 export interface Summary {
@@ -161,9 +234,12 @@ export const regenerateSummary = (code: string, text: string, year_label: string
 
 export interface WatchlistItem {
   code: string; company_name: string | null; created_at: string;
-  signal: "UP" | "DOWN" | null; up_probability: number | null;
+  signal: "UP" | "DOWN" | "NEUTRAL" | null; up_probability: number | null;
   is_correct: boolean | null; signal_date: string | null;
   latest_price: number | null;
+  prev_signal?: string | null;         // 前回のシグナル
+  prob_change_pt?: number | null;      // 前回予測からの上昇確率の変化（pt）
+  signal_changed?: boolean | null;     // 前回からシグナルが変わったか
 }
 
 export const getWatchlist = () =>
@@ -257,3 +333,86 @@ export const closePaperTrade = (id: number, exit_price: number, exit_date: strin
 
 export const deletePaperTrade = (id: number) =>
   apiFetch<void>(`/api/paper-trades/${id}`, { method: "DELETE" });
+
+// ── 予想バトル ──────────────────────────────────────────────
+
+export interface BattleStock {
+  code: string;
+  company_name: string | null;
+  sector_code: string | null;
+  close: number | null;
+  change_5d_pct: number | null;
+  my_pick: "UP" | "DOWN" | null;
+}
+
+export interface BattleToday {
+  round_date: string | null;
+  closed: boolean;
+  stocks: BattleStock[];
+  answered: number;
+  round_size: number;
+  disclaimer: string;
+}
+
+export interface BattleDuel {
+  code: string;
+  company_name: string | null;
+  round_date: string;
+  pick: "UP" | "DOWN";
+  settled: boolean;
+  ai_signal: "UP" | "DOWN" | null;
+  ai_up_probability: number | null;
+  excess_return_pct: number | null;
+  user_correct: boolean | null;
+  ai_correct: boolean | null;
+  outcome: "win" | "lose" | "draw" | null;
+}
+
+export interface BattleSummary {
+  settled: number;
+  pending: number;
+  user_correct: number;
+  user_win_rate: number | null;
+  ai_correct: number;
+  ai_win_rate: number | null;
+  duel_wins: number;
+  duel_losses: number;
+  duel_draws: number;
+  current_streak: number;
+  best_streak: number;
+  title: string;
+  title_needs: number;
+}
+
+export interface BattleMe {
+  summary: BattleSummary;
+  recent: BattleDuel[];
+  handle: string;
+  disclaimer: string;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  handle: string;
+  settled: number;
+  wins: number;
+  win_rate: number;
+  current_streak: number;
+  best_streak: number;
+}
+
+export interface Leaderboard {
+  entries: LeaderboardEntry[];
+  min_picks: number;
+  note: string;
+  disclaimer: string;
+}
+
+export const getBattleToday = () => apiFetch<BattleToday>("/api/battle/today");
+export const getBattleMe = () => apiFetch<BattleMe>("/api/battle/me");
+export const getLeaderboard = () => apiFetch<Leaderboard>("/api/battle/leaderboard");
+export const postBattlePick = (code: string, pick: "UP" | "DOWN") =>
+  apiFetch<{ code: string; pick: string; round_date: string }>("/api/battle/pick", {
+    method: "POST",
+    body: JSON.stringify({ code, pick }),
+  });

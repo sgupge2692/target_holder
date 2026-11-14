@@ -32,6 +32,7 @@ async def test_engine():
                 code TEXT PRIMARY KEY,
                 company_name TEXT,
                 sector TEXT,
+                sector_code TEXT,
                 market TEXT
             )
         """))
@@ -46,6 +47,8 @@ async def test_engine():
                 explanation TEXT,
                 key_factors TEXT,
                 actual_return REAL,
+                market_return REAL,
+                excess_return REAL,
                 is_correct INTEGER
             )
         """))

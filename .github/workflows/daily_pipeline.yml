@@ -1,10 +1,21 @@
 name: Daily ML Pipeline
 
+# 日次の自動実行は、このワークフロー1本に統一している（以前は docker cron / ml_predict.yml と3系統あり、食い違っていた）。
+# 実行する場所: VPS 上の self-hosted runner（docker compose が使える場所）。
+#
+# 時刻: 毎営業日 17:30 JST（UTC 08:30）。
+#   - J-Quants の当日の株価が公開されたあとに取得する
+#   - ニュースの締め切り（各日の 18:00 JST までに見た記事だけを使う。ml/pipeline/news_store.py）より前に収集する
+#   - 配信（メール・X）は予測の直後に行う
 on:
   schedule:
-    # 毎週月〜金 15:35 JST（UTC 06:35）
-    - cron: '35 6 * * 1-5'
+    - cron: '30 8 * * 1-5'
   workflow_dispatch:  # 手動実行も可能
+
+# 前回の実行がまだ続いているときは待つ（二重実行でデータが壊れないように）
+concurrency:
+  group: ml-pipeline
+  cancel-in-progress: false
 
 jobs:
   run_pipeline:
@@ -13,10 +24,15 @@ jobs:
 
     steps:
       - name: チェックアウト
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: データ取得
         run: docker compose exec -T ml python pipeline/fetch_data.py
+
+      # 失敗しても日次パイプライン全体は止めない（ニュース特徴量は、蓄積が溜まるまで学習に使われない）。
+      - name: ニュース収集
+        continue-on-error: true
+        run: docker compose exec -T ml python pipeline/collect_news.py
 
       - name: 特徴量計算
         run: docker compose exec -T ml python pipeline/feature_engineering.py
@@ -30,6 +46,14 @@ jobs:
       - name: 前日実績記録
         run: docker compose exec -T ml python pipeline/backtest.py
 
+      # 配信。古いシグナル（4日超）や認証情報が無いときは、各スクリプトが送らずに正常終了する。
+      - name: 日次メール配信
+        run: docker compose exec -T -e PYTHONPATH=/app backend python /scripts/send_daily_signals.py
+
+      - name: X 投稿
+        continue-on-error: true
+        run: docker compose exec -T -e PYTHONPATH=/app backend python /scripts/post_twitter.py
+
       - name: 成功通知
         if: success()
         run: |
@@ -37,7 +61,13 @@ jobs:
 
       - name: 失敗通知
         if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
-            -H 'Content-type: application/json' \
-            --data '{"text":"❌ Daily pipeline failed! Check GitHub Actions."}'
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -s -X POST "$SLACK_WEBHOOK_URL" \
+              -H 'Content-type: application/json' \
+              --data '{"text":"❌ Daily pipeline failed! Check GitHub Actions."}'
+          else
+            echo "SLACK_WEBHOOK_URL が未設定のため通知しません。Actions のログを確認してください。"
+          fi

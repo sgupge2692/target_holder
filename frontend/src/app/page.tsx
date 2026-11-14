@@ -7,6 +7,7 @@ import { getLatestSignals, getAccuracy, downloadSignalsCsv, type Signal, type Ac
 import { SignalBadge } from "@/components/SignalBadge";
 import { StockSearch } from "@/components/StockSearch";
 import { LandingPage } from "@/components/LandingPage";
+import { SignalLimitBanner } from "@/components/SignalLimitBanner";
 import { SignalRowSkeleton, SignalCardSkeleton, StatCardSkeleton } from "@/components/Skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/Toast";
@@ -37,11 +38,11 @@ const STYLE_TABS: StyleConfig[] = [
     id: "daytrade",
     label: "デイトレ",
     icon: Zap,
-    description: "翌日の短期騰落を予測",
+    description: "翌日の相対的な強弱を予測",
     proOnly: false,
-    defaultMinProb: 65,
+    defaultMinProb: 50,
     signalFilter: "ALL",
-    hint: "翌営業日に上昇 / 下落する可能性の高い銘柄をLGBM×XGBoostアンサンブルで配信",
+    hint: "翌営業日に市場平均を上回る / 下回ると予測される銘柄をLGBM×XGBoostアンサンブルで配信",
   },
   {
     id: "swing",
@@ -49,9 +50,9 @@ const STYLE_TABS: StyleConfig[] = [
     icon: RefreshCw,
     description: "数日〜2週間の中期保有",
     proOnly: true,
-    defaultMinProb: 70,
+    defaultMinProb: 50,
     signalFilter: "UP",
-    hint: "高確度（70%以上）の上昇シグナルのみ表示。数日〜2週間の保有を想定",
+    hint: "市場を上回ると予測される銘柄のみ表示。数日〜2週間の保有を想定（確度スライダーで絞り込み）",
   },
   {
     id: "longterm",
@@ -59,19 +60,19 @@ const STYLE_TABS: StyleConfig[] = [
     icon: BarChart3,
     description: "月次・四半期視点のトレンド",
     proOnly: true,
-    defaultMinProb: 75,
+    defaultMinProb: 50,
     signalFilter: "UP",
-    hint: "強い上昇トレンドを示す銘柄のみ（確度75%以上）。長期保有・積み立て向け",
+    hint: "市場を上回ると予測される銘柄のみ表示。長期保有・積み立て向け（確度スライダーで絞り込み）",
   },
   {
     id: "short",
     label: "信用売り",
     icon: ShortIcon,
-    description: "下落シグナル銘柄を抽出",
+    description: "市場より弱いと予測される銘柄を抽出",
     proOnly: true,
-    defaultMinProb: 65,
+    defaultMinProb: 50,
     signalFilter: "DOWN",
-    hint: "下落確率の高い銘柄を抽出。信用売り・空売りの参考に",
+    hint: "市場を下回ると予測される銘柄を抽出（相対的な弱さの目安。市場全体が上昇する日は下がらないこともあります）",
   },
 ];
 
@@ -120,7 +121,7 @@ function ProbabilityFilter({ value, onChange }: { value: number; onChange: (v: n
       <SlidersHorizontal size={13} className="text-slate-400 shrink-0" />
       <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-semibold">確度 ≥</span>
       <input
-        type="range" min={50} max={95} step={5} value={value}
+        type="range" min={50} max={80} step={1} value={value}
         onChange={e => onChange(Number(e.target.value))}
         className="w-24 accent-teal-600"
       />
@@ -260,6 +261,11 @@ function SignalRow({ s }: { s: Signal }) {
               </span>
             : <span className="text-slate-200 dark:text-slate-700">—</span>
           }
+          {s.excess_return != null && (
+            <div className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+              市場比 {s.excess_return >= 0 ? "+" : ""}{(s.excess_return * 100).toFixed(2)}%
+            </div>
+          )}
         </td>
         <td className="px-4 py-3 text-center text-sm">
           {s.is_correct == null
@@ -327,24 +333,39 @@ function SignalCard({ s, isPro }: { s: Signal; isPro: boolean }) {
             </p>
             <p className="ticker mt-0.5">{s.Code} · {s.Date}</p>
           </div>
-          <SignalBadge signal={s.signal} />
+          <div className="flex flex-col items-end gap-1">
+            <SignalBadge signal={s.signal} />
+            {s.signal_changed && (
+              <span className="rounded bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-amber-700 dark:text-amber-300">
+                転換{s.prev_signal ? `（前回 ${s.prev_signal === "UP" ? "強" : s.prev_signal === "DOWN" ? "弱" : "中立"}）` : ""}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* 確率バー */}
         <div className="mb-2.5">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[10px] font-black tracking-[0.1em] uppercase text-slate-400 dark:text-slate-500">
-              {isDown ? "下落確率" : "上昇確率"}
+              {isDown ? "市場劣後確率" : "市場超過確率"}
             </span>
             <span className={`font-mono font-black text-lg leading-none ${
               isDown ? "text-red-500 dark:text-red-400" : "text-teal-600 dark:text-teal-300"
             }`}>
               {conf}%
+              {s.prob_change_pt != null && Math.abs(s.prob_change_pt) >= 0.1 && (
+                <span
+                  className="ml-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400"
+                  title="前回の予測からの上昇確率の変化"
+                >
+                  {s.prob_change_pt > 0 ? "▲" : "▼"}{Math.abs(s.prob_change_pt).toFixed(1)}pt
+                </span>
+              )}
             </span>
           </div>
           <div className="prob-bar-track h-[3px]">
             <div
-              className={`prob-bar-fill h-[3px] ${isDown ? "bg-red-500" : conf >= 80 ? "bg-teal-500" : conf >= 70 ? "bg-teal-400" : "bg-amber-400"}`}
+              className={`prob-bar-fill h-[3px] ${isDown ? "bg-red-500" : conf >= 60 ? "bg-teal-500" : conf >= 55 ? "bg-teal-400" : "bg-amber-400"}`}
               style={{ width: `${conf}%` }}
             />
           </div>
@@ -430,7 +451,7 @@ export default function HomePage() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
   const [styleTab, setStyleTab] = useState<StyleTab>("daytrade");
-  const [minProb, setMinProb] = useState(65);
+  const [minProb, setMinProb] = useState(50);
   const [csvLoading, setCsvLoading] = useState(false);
 
   const styleConfig = STYLE_TABS.find(t => t.id === styleTab)!;
@@ -521,7 +542,9 @@ export default function HomePage() {
       {user?.plan === "free" && (
         <div className="flex items-center justify-between rounded border border-amber-200 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-900/8 px-4 py-2.5 text-sm">
           <div>
-            <p className="font-black text-amber-800 dark:text-amber-300 text-xs tracking-wide">無料プランは上位 10 件まで</p>
+            <p className="font-black text-amber-800 dark:text-amber-300 text-xs tracking-wide">
+              無料プランは確度の高い上位 {signalData?.free_limit ?? 3} 件まで
+            </p>
             <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">Pro プランで全件表示・CSV・スイング / 長期 / 信用売りモード</p>
           </div>
           <Link
@@ -613,9 +636,9 @@ export default function HomePage() {
                   <th className="text-left">銘柄</th>
                   <th className="text-left">日付</th>
                   <th className="text-center">シグナル</th>
-                  <th className="text-left">{signalFilter === "DOWN" ? "下落確率" : "上昇確率"}</th>
-                  <th className="text-right">実績</th>
-                  <th className="text-center">的中</th>
+                  <th className="text-left">{signalFilter === "DOWN" ? "市場劣後確率" : "市場超過確率"}</th>
+                  <th className="text-right" title="翌営業日の騰落率。的中は市場平均との比較で判定します">騰落</th>
+                  <th className="text-center" title="UP は市場平均を上回ったか、DOWN は下回ったかで判定">的中（対市場）</th>
                   <th className="text-center">解説</th>
                 </tr>
               </thead>
@@ -626,6 +649,15 @@ export default function HomePage() {
               </tbody>
             </table>
           </div>
+
+          {/* 無料プランの制限に達したときのアップグレード誘導 */}
+          {signalData?.is_limited && (
+            <SignalLimitBanner
+              shown={signalData.signals.length}
+              totalAvailable={signalData.total_available}
+              freeLimit={signalData.free_limit}
+            />
+          )}
         </>
       )}
     </div>

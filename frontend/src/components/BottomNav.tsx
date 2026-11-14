@@ -1,13 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, BarChart2, Bookmark, User, FlaskConical } from "lucide-react";
+import { Home, BarChart2, Bookmark, User, Swords } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 const NAV_ITEMS = [
   { href: "/",          icon: Home,         label: "シグナル"   },
   { href: "/backtest",  icon: BarChart2,    label: "実績"       },
-  { href: "/paper",     icon: FlaskConical, label: "模擬売買"   },
+  { href: "/battle",    icon: Swords,       label: "バトル"     },
   { href: "/watchlist", icon: Bookmark,     label: "ウォッチ"   },
   { href: "/account",   icon: User,         label: "アカウント" },
 ];

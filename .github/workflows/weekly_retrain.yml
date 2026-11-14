@@ -6,6 +6,11 @@ on:
     - cron: '0 16 * * 5'
   workflow_dispatch:
 
+# 日次パイプラインと同時に動かさない
+concurrency:
+  group: ml-pipeline
+  cancel-in-progress: false
+
 jobs:
   full_retrain:
     runs-on: self-hosted
@@ -13,7 +18,7 @@ jobs:
 
     steps:
       - name: チェックアウト
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 全データ取得（過去2年分）
         run: docker compose exec -T ml python pipeline/fetch_data.py --full
@@ -29,14 +34,18 @@ jobs:
 
       - name: 成功通知
         if: success()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          [ -n "$SLACK_WEBHOOK_URL" ] && curl -s -X POST "$SLACK_WEBHOOK_URL" \
             -H 'Content-type: application/json' \
-            --data '{"text":"✅ Weekly retrain completed!"}'
+            --data '{"text":"✅ Weekly retrain completed!"}' || echo "SLACK_WEBHOOK_URL 未設定"
 
       - name: 失敗通知
         if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          [ -n "$SLACK_WEBHOOK_URL" ] && curl -s -X POST "$SLACK_WEBHOOK_URL" \
             -H 'Content-type: application/json' \
-            --data '{"text":"❌ Weekly retrain failed! Manual check required."}'
+            --data '{"text":"❌ Weekly retrain failed! Manual check required."}' || echo "SLACK_WEBHOOK_URL 未設定"

@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-MODEL_DIR = "/app/models"
+MODEL_DIR = os.getenv("MODEL_DIR", "/app/models")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 FEATURE_COLS = [
@@ -79,10 +79,13 @@ FEATURE_LABELS = {
     "sector_relative_rsi":    "セクター相対RSI",
     "sector_relative_ma5":    "セクター相対MA5",
     # v4 ニュースセンチメント
-    "news_sentiment":         "ニュースセンチメント",
+    "news_sentiment":         "ニュースセンチメント（3日）",
+    "news_sent_1d":           "ニュースセンチメント（1日）",
     "news_pos_count":         "ポジニュース件数",
     "news_neg_count":         "ネガニュース件数",
-    "news_article_count":     "ニュース取得件数",
+    "news_article_count":     "ニュース件数（3日）",
+    "news_count_1d":          "ニュース件数（1日）",
+    "news_urgency":           "速報ワード含有率",
     # v5 ギャップ・ボラ・価格位置
     "gap_up":                 "ギャップアップ率",
     "gap_down":               "ギャップダウン率",
@@ -102,13 +105,53 @@ FEATURE_LABELS = {
     "new_low_60d":            "60日安値更新",
 }
 
-CONFIDENCE_THRESHOLD = 0.60
+# シグナルを出す確度のしきい値（校正後の確率）。env で上書きできる。
+CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.60"))
+# 確率校正後は確率が 50% 付近に寄り、しきい値を超える銘柄がほとんど無くなりうる。
+# その日のシグナルが空にならないよう、UP / DOWN それぞれ最低この件数を確度の高い順に出す。
+# 0 にすると従来どおり、しきい値を超えたものだけ。
+MIN_SIGNALS_PER_SIDE = int(os.getenv("MIN_SIGNALS_PER_SIDE", "10"))
+
+
+def assign_signals(
+    up_prob: np.ndarray,
+    threshold: float = CONFIDENCE_THRESHOLD,
+    min_per_side: int = MIN_SIGNALS_PER_SIDE,
+) -> np.ndarray:
+    """
+    市場超過確率から UP / DOWN / NEUTRAL を決める。
+
+    1. しきい値以上を UP、(1 - しきい値) 以下を DOWN
+    2. UP / DOWN が min_per_side 件に満たなければ、中立のうち確度の高い順に補う
+       （確率はそのまま表示されるので、「51%」を「確実」と見せることにはならない）
+    """
+    p = np.asarray(up_prob, dtype=float)
+    sig = np.where(p >= threshold, "UP", np.where(p <= 1 - threshold, "DOWN", "NEUTRAL")).astype(object)
+
+    if min_per_side > 0:
+        # UP に補うのは 50% 超、DOWN に補うのは 50% 未満のものだけ（逆向きの銘柄を混ぜない）
+        for side, order, ok in (
+            ("UP", np.argsort(-p, kind="stable"), p > 0.5),
+            ("DOWN", np.argsort(p, kind="stable"), p < 0.5),
+        ):
+            need = min_per_side - int((sig == side).sum())
+            for idx in order:
+                if need <= 0:
+                    break
+                if sig[idx] == "NEUTRAL" and ok[idx]:
+                    sig[idx] = side
+                    need -= 1
+    return sig.astype(str)
 
 
 def get_top_features(model, feature_values: dict, n: int = 5, feat_cols: list | None = None) -> list[dict]:
     """LightGBM の feature importance 上位 n 件と実際の値を返す"""
     cols = feat_cols or FEATURE_COLS
-    importances = model.feature_importances_
+    # LGBMClassifier(sklearn API)は feature_importances_、Booster は feature_importance()
+    if hasattr(model, "feature_importances_"):
+        importances = model.feature_importances_
+    else:
+        importances = model.feature_importance(importance_type="gain")
     ranked = sorted(
         zip(cols, importances, [feature_values.get(f) for f in cols]),
         key=lambda x: x[1],
@@ -119,7 +162,7 @@ def get_top_features(model, feature_values: dict, n: int = 5, feat_cols: list | 
         if val is None or (isinstance(val, float) and np.isnan(val)):
             continue
         label = FEATURE_LABELS.get(name, name)
-        result.append({"name": name, "label": label, "importance": float(imp), "value": float(val)})
+        result.append({"name": name, "feature": name, "label": label, "importance": float(imp), "value": float(val)})
     return result
 
 
@@ -148,16 +191,18 @@ def _fmt_feature_value(name: str, val: float) -> str:
 
 
 def build_prompt(code: str, signal: str, up_prob: float, top_features: list[dict]) -> str:
-    direction = "上昇" if signal == "UP" else "下落"
+    # モデルは「翌日、市場平均（全銘柄の中央値）を上回るか」を予測している
+    direction = "市場平均を上回る" if signal == "UP" else "市場平均を下回る"
     feat_lines = "\n".join(
         f"  - {f['label']}: {_fmt_feature_value(f['name'], f['value'])}" for f in top_features
     )
     return f"""あなたは株式テクニカル分析の専門家です。
 以下の情報をもとに、銘柄 {code} の翌日予測シグナル（{direction}）の理由を
 個人投資家向けに分かりやすい日本語で説明してください。
+注意: これは株価の絶対的な上げ下げではなく、市場全体の動きに対する相対的な強弱の予測です。
 
-予測シグナル: {signal}（{direction}予測）
-上昇確率: {up_prob:.1%}
+予測シグナル: {signal}（{direction}と予測）
+市場超過確率（市場平均を上回る確率）: {up_prob:.1%}
 
 モデルが重視した主要指標（上位5件）:
 {feat_lines}
@@ -165,7 +210,7 @@ def build_prompt(code: str, signal: str, up_prob: float, top_features: list[dict
 指示:
 - 数字は具体的に引用してください（例: RSI 28.3 → 売られ過ぎ水準）
 - 専門用語は簡単な補足をつけてください
-- {direction}の根拠を明確に述べてください
+- {direction}と予測する根拠を明確に述べてください
 
 以下の JSON 形式のみで回答してください（他のテキスト不要）:
 {{
@@ -221,6 +266,28 @@ def load_models():
     return lgbm, xgb, scaler, weights, feat_cols
 
 
+def load_calibrator():
+    """確率校正パラメータ（train.py が保存）。無ければ None（未校正の確率をそのまま使う）。"""
+    path = f"{MODEL_DIR}/calibrator.pkl"
+    if not os.path.exists(path):
+        print("calibrator.pkl なし — 未校正の確率を使用します。")
+        return None
+    try:
+        return joblib.load(path)
+    except Exception as e:
+        print(f"calibrator 読み込み失敗 ({e}) — 未校正の確率を使用します。")
+        return None
+
+
+def apply_calibration(prob_up: np.ndarray, params: dict | None) -> np.ndarray:
+    """Platt scaling。単調増加なので銘柄の順位は変わらない。"""
+    if not params:
+        return prob_up
+    p = np.clip(prob_up, 1e-6, 1 - 1e-6)
+    z = params["a"] * np.log(p / (1 - p)) + params["b"]
+    return 1.0 / (1.0 + np.exp(-z))
+
+
 def main(output_summary: str | None = None, dry_run: bool = False):
     engine = create_engine(DATABASE_URL)
 
@@ -249,17 +316,20 @@ def main(output_summary: str | None = None, dry_run: bool = False):
     else:
         up_prob = lgbm_prob
 
+    up_prob = apply_calibration(up_prob, load_calibrator())
+
     proba = np.column_stack([1 - up_prob, up_prob])
     latest_valid = latest.loc[valid_idx].copy()
     latest_valid["up_probability"] = up_prob
-    latest_valid["signal"] = np.where(
-        latest_valid["up_probability"] >= CONFIDENCE_THRESHOLD, "UP",
-        np.where(latest_valid["up_probability"] <= (1 - CONFIDENCE_THRESHOLD), "DOWN", "NEUTRAL"),
-    )
+    latest_valid["signal"] = assign_signals(latest_valid["up_probability"].to_numpy())
     latest_valid["predicted_at"] = datetime.now()
 
     # シグナルのみ対象
     signals = latest_valid[latest_valid["signal"] != "NEUTRAL"].copy()
+    if signals.empty:
+        print(f"[WARN] 確度 {CONFIDENCE_THRESHOLD:.0%} 以上のシグナルが 0 件です。"
+              f"校正後の確率は 50% 付近に寄るため、train.py が出力する"
+              f"「確度しきい値ごとの出現率と的中率」を見て CONFIDENCE_THRESHOLD を調整してください。")
 
     # LLM で説明生成（UP/DOWN のみ、バッチ処理）
     explanations = []
@@ -280,16 +350,24 @@ def main(output_summary: str | None = None, dry_run: bool = False):
     signals["explanation"] = explanations
     signals["key_factors"] = key_factors_list
 
+    # NEUTRAL も保存する。保存しないと、(1) 前日 UP だった銘柄が今日 NEUTRAL になっても古い UP が
+    # 「最新」として残る、(2) 業種別・同業種比較が「シグナルが出た銘柄だけ」の偏った集計になる、
+    # (3) 「中立 → UP」といった変化を検知できない。API の一覧・的中率は UP/DOWN だけを対象にする。
+    neutral = latest_valid[latest_valid["signal"] == "NEUTRAL"].copy()
+    neutral["explanation"] = ""
+    neutral["key_factors"] = "[]"
+    to_save = pd.concat([signals, neutral], ignore_index=True)
+
     up_count = int((signals["signal"] == "UP").sum())
     down_count = int((signals["signal"] == "DOWN").sum())
 
     # DB に保存（dry_run のときはスキップ）
-    out = signals[["Code", "Date", "up_probability", "signal", "predicted_at", "explanation", "key_factors"]]
+    out = to_save[["Code", "Date", "up_probability", "signal", "predicted_at", "explanation", "key_factors"]]
     if dry_run:
-        print(f"[DRY RUN] Would save {len(signals)} signals (UP: {up_count}, DOWN: {down_count})")
+        print(f"[DRY RUN] Would save {len(out)} rows (UP: {up_count}, DOWN: {down_count}, NEUTRAL: {len(neutral)})")
     else:
         out.to_sql("predictions", engine, if_exists="append", index=False)
-        print(f"Saved {len(signals)} signals (UP: {up_count}, DOWN: {down_count})")
+        print(f"Saved {len(out)} rows (UP: {up_count}, DOWN: {down_count}, NEUTRAL: {len(neutral)})")
 
     if OPENAI_API_KEY:
         print("LLM explanations generated.")

@@ -71,12 +71,12 @@ async def get_stats(
                 COUNT(*) FILTER (WHERE signal='DOWN') as down_count,
                 COUNT(*) FILTER (WHERE actual_return IS NOT NULL) as evaluated,
                 ROUND(
-                  COUNT(*) FILTER (WHERE signal='UP' AND actual_return > 0)::numeric
-                  / NULLIF(COUNT(*) FILTER (WHERE signal='UP' AND actual_return IS NOT NULL), 0)
+                  COUNT(*) FILTER (WHERE signal='UP' AND is_correct)::numeric
+                  / NULLIF(COUNT(*) FILTER (WHERE signal='UP' AND is_correct IS NOT NULL), 0)
                   * 100, 1
                 ) as up_accuracy
             FROM predictions
-            WHERE predicted_at >= NOW() - INTERVAL '30 days'
+            WHERE predicted_at >= NOW() - INTERVAL '30 days' AND signal IN ('UP', 'DOWN')
         """)
     )
     sig = signal_stats_r.fetchone()
@@ -169,12 +169,12 @@ async def daily_signal_stats(
                 COUNT(*) FILTER (WHERE signal='UP') as up,
                 COUNT(*) FILTER (WHERE signal='DOWN') as down,
                 ROUND(
-                  COUNT(*) FILTER (WHERE signal='UP' AND actual_return > 0)::numeric
-                  / NULLIF(COUNT(*) FILTER (WHERE signal='UP' AND actual_return IS NOT NULL), 0)
+                  COUNT(*) FILTER (WHERE signal='UP' AND is_correct)::numeric
+                  / NULLIF(COUNT(*) FILTER (WHERE signal='UP' AND is_correct IS NOT NULL), 0)
                   * 100, 1
                 ) as accuracy_pct
             FROM predictions
-            WHERE predicted_at >= NOW() - (:days || ' days')::interval
+            WHERE predicted_at >= NOW() - (:days || ' days')::interval AND signal IN ('UP', 'DOWN')
             GROUP BY 1 ORDER BY 1 DESC
         """),
         {"days": days},

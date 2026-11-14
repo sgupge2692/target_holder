@@ -97,7 +97,7 @@ function SignalSimulator({
       </div>
 
       <p className="text-xs text-slate-600 text-center">
-        ※ 期待値計算（上昇確率×+3% − 下降確率×2%）。投資判断の参考に限ります。
+        ※ 期待値計算（超過確率×+3% − (1−超過確率)×2%）。投資判断の参考に限ります。
       </p>
     </div>
   );

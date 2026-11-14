@@ -234,7 +234,7 @@ export function LandingPage() {
           <h1 className="text-5xl sm:text-6xl font-black text-white leading-[1.08] tracking-tight">
             株の<br />
             <span className="relative inline-block">
-              <span className="relative z-10 text-teal-400">上がる・下がる</span>
+              <span className="relative z-10 text-teal-400">市場より強い・弱い</span>
               <span className="absolute bottom-1 left-0 right-0 h-3 bg-teal-900/40 -z-10 rounded" />
             </span>
             <br />をAIが予測
@@ -242,7 +242,7 @@ export function LandingPage() {
 
           <p className="text-base text-slate-400 leading-relaxed max-w-md">
             毎営業日の朝、46種のテクニカル指標 × セクター分析 × ニュースセンチメントで
-            翌日の騰落シグナルを自動配信。
+            翌日に市場平均を上回る・下回ると予測される銘柄を自動配信。
           </p>
 
           {/* CTA ボタン */}
@@ -266,10 +266,10 @@ export function LandingPage() {
           {/* 実績バッジ */}
           <div className="flex flex-wrap gap-3 pt-1">
             {upRow && (
-              <StatBadge value={`${upRow.accuracy_pct}%`} label={`上昇的中率 (n=${upRow.total})`} isUp={true} />
+              <StatBadge value={`${upRow.accuracy_pct}%`} label={`UP 的中率・対市場 (n=${upRow.total})`} isUp={true} />
             )}
             {downRow && (
-              <StatBadge value={`${downRow.accuracy_pct}%`} label={`下落的中率 (n=${downRow.total})`} isUp={false} />
+              <StatBadge value={`${downRow.accuracy_pct}%`} label={`DOWN 的中率・対市場 (n=${downRow.total})`} isUp={false} />
             )}
             {lastCumReturn != null && (
               <StatBadge
@@ -312,7 +312,7 @@ export function LandingPage() {
             どうやって<br />予測するの？
           </h2>
           <p className="text-sm text-slate-500 leading-relaxed">
-            毎日3ステップで、翌日上昇・下落が期待される銘柄を自動選定します。
+            毎日3ステップで、翌日に市場平均を上回る・下回ると予測される銘柄を自動選定します。
           </p>
         </div>
         <div>
@@ -403,7 +403,7 @@ export function LandingPage() {
             cta="無料で始める"
             href="/auth"
             features={[
-              { text: "毎日のシグナル（上位10件）", included: true },
+              { text: "毎日のシグナル（上位3件）", included: true },
               { text: "シグナル確率表示",          included: true },
               { text: "バックテスト結果閲覧",       included: true },
               { text: "銘柄検索",                  included: true },

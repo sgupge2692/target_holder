@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import roc_auc_score
 from lightgbm import LGBMClassifier, early_stopping, log_evaluation
 from sqlalchemy import create_engine, text
@@ -27,9 +26,33 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+try:
+    from pipeline.evaluation import (
+        walk_forward_splits, split_for_early_stopping, evaluate_predictions, calibration_report,
+    )
+    from pipeline.news_store import NEWS_FEATURE_COLS, COVERED_COL, covered_days
+except ImportError:  # python pipeline/train.py で直接実行する場合
+    from evaluation import (
+        walk_forward_splits, split_for_early_stopping, evaluate_predictions, calibration_report,
+    )
+    from news_store import NEWS_FEATURE_COLS, COVERED_COL, covered_days
+
 DATABASE_URL = os.getenv("DATABASE_URL")
-MODEL_DIR = "/app/models"
-os.makedirs(MODEL_DIR, exist_ok=True)
+MODEL_DIR = os.getenv("MODEL_DIR", "/app/models")
+
+# 評価設定
+N_SPLITS = 5          # ウォークフォワードの分割数
+EMBARGO_DAYS = 2      # 学習と検証の間を空ける営業日数
+TOP_K = 20            # 「毎日、上位K銘柄」の的中率を測る
+CONFIDENCE = 0.60     # predict.py の CONFIDENCE_THRESHOLD と揃える
+
+# 目的変数: 市場平均に対する超過リターン（feature_engineering.add_excess_labels）。
+# features に無い（旧データ）場合は従来の絶対リターンのラベルにフォールバックする。
+TARGET_COL = "label_excess"
+FALLBACK_TARGET_COL = "label"
+RETURN_COL = "excess_return"
+# makedirs はモジュールレベルではなく実際にモデルを保存するときだけ行う。
+# import 時に /app が存在しない環境（CI など）でも問題が起きないようにするため。
 
 # ── 特徴量リスト（feature_engineering.py と同期） ────────────────
 FEATURE_COLS = [
@@ -52,8 +75,7 @@ FEATURE_COLS = [
     # v3 追加: セクター・市場相対
     "market_relative_return", "market_relative_rsi",
     "sector_relative_return", "sector_relative_rsi", "sector_relative_ma5",
-    # v4 追加: ニュースセンチメント（NEWS_SENTIMENT=true 時のみ有効）
-    "news_sentiment", "news_pos_count", "news_neg_count", "news_article_count",
+    # ニュース特徴量（NEWS_FEATURE_COLS）は、蓄積期間が足りるときだけ resolve_feature_cols が追加する
     # v5 追加: ギャップ・出来高急増・ボラティリティ・価格位置・ストリーク
     "gap_up", "gap_down", "gap",
     "volume_spike", "volume_spike_ratio",
@@ -99,28 +121,120 @@ DEFAULT_XGB_PARAMS = dict(
 # ────────────────────────────────────────────────────────────────
 
 def load_features(engine) -> pd.DataFrame:
-    return pd.read_sql("SELECT * FROM features", engine)
+    return pd.read_sql('SELECT * FROM features ORDER BY "Date", "Code"', engine)
 
 
-def prepare_data(df: pd.DataFrame):
-    available = [c for c in FEATURE_COLS if c in df.columns]
-    missing   = [c for c in FEATURE_COLS if c not in df.columns]
+# ニュース特徴量を学習に使うか: auto（蓄積が NEWS_MIN_DAYS 日以上なら使う）/ on / off
+NEWS_FEATURES = os.getenv("NEWS_FEATURES", "auto").lower()
+NEWS_MIN_DAYS = int(os.getenv("NEWS_MIN_DAYS", "90"))
+
+
+def resolve_feature_cols(df: pd.DataFrame, mode: str | None = None, min_days: int | None = None):
+    """
+    学習に使う特徴量と、使う行を決める。
+
+    ニュースは蓄積を始めた日以降にしか存在しない。蓄積が短いまま使うと、
+    「ニュースが 0 の古い期間」と「ニュースがある新しい期間」が混ざって、見かけの精度が歪む。
+    そこで、蓄積が min_days 日以上あるときだけニュース特徴量を使い、
+    その場合はニュースを観測できていた日（news_covered=1）の行だけで学習する。
+
+    Returns: (feature_cols, df（必要なら行を絞ったもの）, 理由の文字列)
+    """
+    mode = (mode or NEWS_FEATURES).lower()
+    min_days = NEWS_MIN_DAYS if min_days is None else min_days
+    base = list(FEATURE_COLS)
+    has_cols = all(c in df.columns for c in NEWS_FEATURE_COLS) and COVERED_COL in df.columns
+    days = covered_days(df) if has_cols else 0
+
+    if mode == "off":
+        return base, df, "ニュース特徴量: 使わない（NEWS_FEATURES=off）"
+    if not has_cols:
+        return base, df, "ニュース特徴量: 使わない（features にニュース列が無い）"
+    if mode == "auto" and days < min_days:
+        return base, df, f"ニュース特徴量: 使わない（蓄積 {days} 日 < {min_days} 日。collect_news.py を毎日回して蓄積する）"
+    if days == 0:
+        return base, df, "ニュース特徴量: 使わない（観測できた日が 0 日）"
+    covered = df[df[COVERED_COL] == 1]
+    return (
+        base + list(NEWS_FEATURE_COLS), covered,
+        f"ニュース特徴量: 使う（観測できた {days} 日・{len(covered)} 行のみで学習。それ以前の行は使わない）",
+    )
+
+
+def prepare_data_with_meta(df: pd.DataFrame):
+    """
+    学習用データを作る。日付順に並べ替え、評価に必要な日付・翌日リターンも返す。
+
+    Returns:
+        X, y, scale_pos_weight, feature_cols, meta(DataFrame: Date, next_return)
+        いずれも行の並びは同一（日付 → 銘柄コード順、index は 0..n-1）
+    """
+    wanted, df, news_msg = resolve_feature_cols(df)
+    print(f"  {news_msg}")
+    df = df.sort_values(["Date", "Code"]).reset_index(drop=True)
+
+    available = [c for c in wanted if c in df.columns]
+    missing   = [c for c in wanted if c not in df.columns]
     if missing:
         print(f"[WARN] 特徴量 {len(missing)} 件が DB に未存在（スキップ）: {missing[:5]}...")
 
+    target_col = TARGET_COL if TARGET_COL in df.columns else FALLBACK_TARGET_COL
+    return_col = RETURN_COL if target_col == TARGET_COL and RETURN_COL in df.columns else "next_return"
+    print(f"  目的変数: {target_col}（IC は {return_col} で評価）")
+
     X = df[available].replace([np.inf, -np.inf], np.nan).dropna()
-    y = df.loc[X.index, "label"]
+    y = df.loc[X.index, target_col]
 
     mask = y != 0
     X, y = X[mask], y[mask]
     y = (y == 1).astype(int)
+
+    meta = pd.DataFrame({
+        "Date": df.loc[X.index, "Date"],
+        "next_return": df.loc[X.index, return_col] if return_col in df.columns else np.nan,
+    })
+
+    X = X.reset_index(drop=True)
+    y = y.reset_index(drop=True)
+    meta = meta.reset_index(drop=True)
 
     pos = y.mean()
     neg = 1 - pos
     print(f"  UP: {pos:.1%}  DOWN: {neg:.1%}  total: {len(y)}")
     scale_pos_weight = neg / pos if pos > 0 else 1.0
 
-    return X, y, scale_pos_weight, available
+    return X, y, scale_pos_weight, available, meta
+
+
+def prepare_data(df: pd.DataFrame):
+    X, y, spw, cols, _ = prepare_data_with_meta(df)
+    return X, y, spw, cols
+
+
+def _print_eval(label: str, m: dict):
+    print(f"    {label:<9} AUC {m['auc']:.4f} | 日別AUC {m['daily_auc']:.4f} | IC {m['daily_ic']:+.4f} | "
+          f"上位{TOP_K}的中 {m['precision_topk']:.3f} | 確度{CONFIDENCE:.0%}以上 的中 {m['hit_rate_conf']:.3f} "
+          f"(出現率 {m['coverage_conf']:.1%})")
+
+
+def _mean_metric(rows: list, key: str) -> float:
+    return float(np.nanmean([r[key] for r in rows]))
+
+
+def _calibrate_and_save(oof_prob: list, oof_y: list, oof_fold: list) -> dict:
+    """OOF 予測から確率校正器を作って保存し、検証指標を返す。"""
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    params, m = calibration_report(
+        np.concatenate(oof_prob), np.concatenate(oof_y), np.concatenate(oof_fold),
+    )
+    joblib.dump(params, f"{MODEL_DIR}/calibrator.pkl")
+    if "ece_raw" in m:
+        print(f"  確率校正（未来フォールドで検証）: ECE {m['ece_raw']:.4f} → {m['ece_calibrated']:.4f} / "
+              f"Brier {m['brier_raw']:.4f} → {m['brier_calibrated']:.4f}")
+    print("  確度しきい値ごとの出現率と的中率（校正後）:")
+    for t, v in m["threshold_table"].items():
+        print(f"    ≥{t}: 出現率 {v['coverage']:.1%}  的中率 {v['hit_rate']:.3f}")
+    return {k: v for k, v in m.items() if k not in ("threshold_table", "calibration")}
 
 
 # ────────────────────────────────────────────────────────────────
@@ -128,40 +242,64 @@ def prepare_data(df: pd.DataFrame):
 # ────────────────────────────────────────────────────────────────
 
 def train_full(df: pd.DataFrame, params: dict = None):
-    X, y, scale_pos_weight, feat_cols = prepare_data(df)
-
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    X, y, scale_pos_weight, feat_cols, meta = prepare_data_with_meta(df)
 
     if params is None:
         params = DEFAULT_LGBM_PARAMS.copy()
-    params["scale_pos_weight"] = scale_pos_weight
+    params = {**params, "scale_pos_weight": scale_pos_weight}
 
-    tscv = TimeSeriesSplit(n_splits=5)
-    aucs = []
-    for fold, (tr_idx, val_idx) in enumerate(tscv.split(X_scaled), 1):
+    # 木モデルはスケール不変なので CV は生の特徴量で行う（scaler は predict.py 互換のため保存のみ）
+    Xv = X.values
+    folds, best_iters = [], []
+    oof_prob, oof_y, oof_fold = [], [], []
+    print("=== LightGBM ウォークフォワードCV（日付分割・embargo付き）===")
+    for fold, (tr_idx, val_idx) in enumerate(walk_forward_splits(meta["Date"], N_SPLITS, EMBARGO_DAYS), 1):
+        fit_idx, es_idx = split_for_early_stopping(tr_idx, meta["Date"], embargo_days=EMBARGO_DAYS)
         m = LGBMClassifier(**params)
         m.fit(
-            X_scaled[tr_idx], y.iloc[tr_idx],
-            eval_set=[(X_scaled[val_idx], y.iloc[val_idx])],
+            Xv[fit_idx], y.iloc[fit_idx],
+            eval_set=[(Xv[es_idx], y.iloc[es_idx])],      # early stopping は学習側の末尾だけで行う
             callbacks=[early_stopping(50, verbose=False), log_evaluation(-1)],
         )
-        auc = roc_auc_score(y.iloc[val_idx], m.predict_proba(X_scaled[val_idx])[:, 1])
-        aucs.append(auc)
-        print(f"  Fold {fold} AUC: {auc:.4f}")
+        prob = m.predict_proba(Xv[val_idx])[:, 1]
+        res = evaluate_predictions(
+            meta["Date"].iloc[val_idx], y.iloc[val_idx].values, prob,
+            meta["next_return"].iloc[val_idx].values, TOP_K, CONFIDENCE,
+        )
+        folds.append(res)
+        oof_prob.append(prob); oof_y.append(y.iloc[val_idx].values); oof_fold.append(np.full(len(val_idx), fold))
+        best_iters.append(m.best_iteration_ or params["n_estimators"])
+        print(f"  Fold {fold} (train {len(tr_idx)} / val {len(val_idx)}, best_iter {best_iters[-1]})")
+        _print_eval("LGBM", res)
 
-    print(f"  Mean AUC: {np.mean(aucs):.4f} ± {np.std(aucs):.4f}")
+    mean_auc = _mean_metric(folds, "auc")
+    std_auc = float(np.nanstd([r["auc"] for r in folds]))
+    print(f"  Mean AUC: {mean_auc:.4f} ± {std_auc:.4f}  /  日別AUC {_mean_metric(folds, 'daily_auc'):.4f}  "
+          f"/  IC {_mean_metric(folds, 'daily_ic'):+.4f}")
 
-    model = LGBMClassifier(**params)
+    calib_metrics = _calibrate_and_save(oof_prob, oof_y, oof_fold)
+
+    # 最終モデル: CV で見つけた木の本数に固定（全データを 1000 本で学習すると過学習する）
+    final_params = {**params, "n_estimators": max(int(np.mean(best_iters) * 1.1), 50)}
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    model = LGBMClassifier(**final_params)
     model.fit(X_scaled, y, callbacks=[log_evaluation(-1)])
 
+    os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(model,  f"{MODEL_DIR}/lgbm_model.pkl")
     joblib.dump(scaler, f"{MODEL_DIR}/scaler.pkl")
     joblib.dump(feat_cols, f"{MODEL_DIR}/feature_cols.pkl")
-    joblib.dump({"mean_auc": float(np.mean(aucs)), "std_auc": float(np.std(aucs))},
-                f"{MODEL_DIR}/metrics.pkl")
+    joblib.dump({
+        "mean_auc": mean_auc, "std_auc": std_auc,
+        "daily_auc": _mean_metric(folds, "daily_auc"),
+        "daily_ic": _mean_metric(folds, "daily_ic"),
+        "precision_topk": _mean_metric(folds, "precision_topk"),
+        "hit_rate_conf": _mean_metric(folds, "hit_rate_conf"),
+        **calib_metrics,
+    }, f"{MODEL_DIR}/metrics.pkl")
     print("LightGBM model saved.")
-    return float(np.mean(aucs))
+    return mean_auc
 
 
 # ────────────────────────────────────────────────────────────────
@@ -177,73 +315,93 @@ def train_ensemble(df: pd.DataFrame):
         train_full(df)
         return
 
-    X, y, scale_pos_weight, feat_cols = prepare_data(df)
+    X, y, scale_pos_weight, feat_cols, meta = prepare_data_with_meta(df)
+    Xv = X.values
 
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    lgbm_rows, xgb_rows, ens_rows = [], [], []
+    lgbm_iters, xgb_iters = [], []
+    oof_prob, oof_y, oof_fold = [], [], []
 
-    tscv = TimeSeriesSplit(n_splits=5)
-    lgbm_aucs, xgb_aucs, ens_aucs = [], [], []
+    print("=== アンサンブル ウォークフォワードCV（日付分割・embargo付き）===")
+    for fold, (tr_idx, val_idx) in enumerate(walk_forward_splits(meta["Date"], N_SPLITS, EMBARGO_DAYS), 1):
+        fit_idx, es_idx = split_for_early_stopping(tr_idx, meta["Date"], embargo_days=EMBARGO_DAYS)
+        dates_val = meta["Date"].iloc[val_idx]
+        ret_val = meta["next_return"].iloc[val_idx].values
+        y_val = y.iloc[val_idx].values
 
-    print("=== アンサンブル CV ===")
-    for fold, (tr_idx, val_idx) in enumerate(tscv.split(X_scaled), 1):
-        X_tr, X_val = X_scaled[tr_idx], X_scaled[val_idx]
-        y_tr, y_val = y.iloc[tr_idx],   y.iloc[val_idx]
-
-        # LightGBM
         lgbm = LGBMClassifier(**{**DEFAULT_LGBM_PARAMS, "scale_pos_weight": scale_pos_weight})
-        lgbm.fit(X_tr, y_tr,
-                 eval_set=[(X_val, y_val)],
+        lgbm.fit(Xv[fit_idx], y.iloc[fit_idx],
+                 eval_set=[(Xv[es_idx], y.iloc[es_idx])],
                  callbacks=[early_stopping(50, verbose=False), log_evaluation(-1)])
-        lgbm_prob = lgbm.predict_proba(X_val)[:, 1]
-        lgbm_auc  = roc_auc_score(y_val, lgbm_prob)
+        lgbm_prob = lgbm.predict_proba(Xv[val_idx])[:, 1]
 
-        # XGBoost
         xgb_p = DEFAULT_XGB_PARAMS.copy()
         xgb_p["scale_pos_weight"] = scale_pos_weight
         xgb = XGBClassifier(**xgb_p)
-        xgb.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], verbose=False)
-        xgb_prob = xgb.predict_proba(X_val)[:, 1]
-        xgb_auc  = roc_auc_score(y_val, xgb_prob)
+        xgb.fit(Xv[fit_idx], y.iloc[fit_idx], eval_set=[(Xv[es_idx], y.iloc[es_idx])], verbose=False)
+        xgb_prob = xgb.predict_proba(Xv[val_idx])[:, 1]
 
-        # 重み付き平均（AUCが高い方を重く）
-        w_lgbm = lgbm_auc / (lgbm_auc + xgb_auc)
-        w_xgb  = xgb_auc  / (lgbm_auc + xgb_auc)
-        ens_prob = w_lgbm * lgbm_prob + w_xgb * xgb_prob
-        ens_auc  = roc_auc_score(y_val, ens_prob)
+        lgbm_res = evaluate_predictions(dates_val, y_val, lgbm_prob, ret_val, TOP_K, CONFIDENCE)
+        xgb_res  = evaluate_predictions(dates_val, y_val, xgb_prob,  ret_val, TOP_K, CONFIDENCE)
 
-        lgbm_aucs.append(lgbm_auc)
-        xgb_aucs.append(xgb_auc)
-        ens_aucs.append(ens_auc)
-        print(f"  Fold {fold}  LGBM: {lgbm_auc:.4f}  XGB: {xgb_auc:.4f}  Ensemble: {ens_auc:.4f}")
+        # 重みは「検証フォールドの AUC」ではなく固定の等重みで開始し、
+        # 学習側の情報だけで決める（検証期間の結果で重みを決めると評価が楽観的になる）
+        ens_prob = 0.5 * lgbm_prob + 0.5 * xgb_prob
+        ens_res = evaluate_predictions(dates_val, y_val, ens_prob, ret_val, TOP_K, CONFIDENCE)
 
-    print(f"  Mean AUC — LGBM: {np.mean(lgbm_aucs):.4f}  XGB: {np.mean(xgb_aucs):.4f}  Ensemble: {np.mean(ens_aucs):.4f}")
+        lgbm_rows.append(lgbm_res); xgb_rows.append(xgb_res); ens_rows.append(ens_res)
+        oof_prob.append(ens_prob); oof_y.append(y_val); oof_fold.append(np.full(len(val_idx), fold))
+        lgbm_iters.append(lgbm.best_iteration_ or DEFAULT_LGBM_PARAMS["n_estimators"])
+        xgb_iters.append((getattr(xgb, "best_iteration", None) or DEFAULT_XGB_PARAMS["n_estimators"]) + 1)
 
-    # 全データで最終学習
-    final_lgbm = LGBMClassifier(**{**DEFAULT_LGBM_PARAMS, "scale_pos_weight": scale_pos_weight})
+        print(f"  Fold {fold} (train {len(tr_idx)} / val {len(val_idx)})")
+        _print_eval("LGBM", lgbm_res)
+        _print_eval("XGB", xgb_res)
+        _print_eval("Ensemble", ens_res)
+
+    mean_lgbm = _mean_metric(lgbm_rows, "auc")
+    mean_xgb  = _mean_metric(xgb_rows, "auc")
+    mean_ens  = _mean_metric(ens_rows, "auc")
+    print(f"  Mean AUC — LGBM: {mean_lgbm:.4f}  XGB: {mean_xgb:.4f}  Ensemble: {mean_ens:.4f}")
+    print(f"  Ensemble 日別AUC {_mean_metric(ens_rows, 'daily_auc'):.4f} / IC {_mean_metric(ens_rows, 'daily_ic'):+.4f} "
+          f"/ 上位{TOP_K}的中 {_mean_metric(ens_rows, 'precision_topk'):.3f}")
+
+    calib_metrics = _calibrate_and_save(oof_prob, oof_y, oof_fold)
+
+    # 最終モデル: CV で見つけた木の本数に固定して全データで学習
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    final_lgbm = LGBMClassifier(**{
+        **DEFAULT_LGBM_PARAMS, "scale_pos_weight": scale_pos_weight,
+        "n_estimators": max(int(np.mean(lgbm_iters) * 1.1), 50),
+    })
     final_lgbm.fit(X_scaled, y, callbacks=[log_evaluation(-1)])
 
     xgb_p = DEFAULT_XGB_PARAMS.copy()
-    xgb_p.pop("early_stopping_rounds", None)  # 全データ学習時は不要
+    xgb_p.pop("early_stopping_rounds", None)
     xgb_p["scale_pos_weight"] = scale_pos_weight
+    xgb_p["n_estimators"] = max(int(np.mean(xgb_iters) * 1.1), 50)
     final_xgb = XGBClassifier(**xgb_p)
     final_xgb.fit(X_scaled, y, verbose=False)
 
-    # CV の平均 AUC を重みに
-    mean_lgbm = np.mean(lgbm_aucs)
-    mean_xgb  = np.mean(xgb_aucs)
-    w_lgbm = mean_lgbm / (mean_lgbm + mean_xgb)
-    w_xgb  = mean_xgb  / (mean_lgbm + mean_xgb)
+    # predict.py 互換のため重みは保存する（現状は等重み）
+    w_lgbm, w_xgb = 0.5, 0.5
 
+    os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(final_lgbm, f"{MODEL_DIR}/lgbm_model.pkl")
     joblib.dump(final_xgb,  f"{MODEL_DIR}/xgb_model.pkl")
     joblib.dump(scaler,     f"{MODEL_DIR}/scaler.pkl")
     joblib.dump(feat_cols,  f"{MODEL_DIR}/feature_cols.pkl")
-    joblib.dump({"lgbm": float(w_lgbm), "xgb": float(w_xgb)},
-                f"{MODEL_DIR}/ensemble_weights.pkl")
-    joblib.dump({"lgbm_auc": float(mean_lgbm), "xgb_auc": float(mean_xgb),
-                 "ensemble_auc": float(np.mean(ens_aucs))},
-                f"{MODEL_DIR}/metrics.pkl")
+    joblib.dump({"lgbm": w_lgbm, "xgb": w_xgb}, f"{MODEL_DIR}/ensemble_weights.pkl")
+    joblib.dump({
+        "lgbm_auc": mean_lgbm, "xgb_auc": mean_xgb, "ensemble_auc": mean_ens,
+        "daily_auc": _mean_metric(ens_rows, "daily_auc"),
+        "daily_ic": _mean_metric(ens_rows, "daily_ic"),
+        "precision_topk": _mean_metric(ens_rows, "precision_topk"),
+        "hit_rate_conf": _mean_metric(ens_rows, "hit_rate_conf"),
+        **calib_metrics,
+    }, f"{MODEL_DIR}/metrics.pkl")
     print(f"Ensemble saved. Weights — LGBM: {w_lgbm:.3f}  XGB: {w_xgb:.3f}")
 
 
@@ -269,14 +427,16 @@ def train_incremental(df: pd.DataFrame):
         if os.path.exists(f"{MODEL_DIR}/feature_cols.pkl") else FEATURE_COLS
     available = [c for c in feat_cols if c in recent.columns]
 
+    target_col = TARGET_COL if TARGET_COL in recent.columns else FALLBACK_TARGET_COL
     X = recent[available].replace([np.inf, -np.inf], np.nan).dropna()
-    y = recent.loc[X.index, "label"]
+    y = recent.loc[X.index, target_col]
     mask = y != 0
     X, y = X[mask], y[mask]
     y = (y == 1).astype(int)
 
     X_scaled = scaler.transform(X)
     model.fit(X_scaled, y, init_model=model)
+    os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(model, f"{MODEL_DIR}/lgbm_model.pkl")
     print("Incremental update done.")
 
@@ -295,10 +455,9 @@ def tune_and_train(df: pd.DataFrame):
         train_full(df)
         return
 
-    X, y, scale_pos_weight, feat_cols = prepare_data(df)
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    tscv = TimeSeriesSplit(n_splits=3)
+    X, y, scale_pos_weight, feat_cols, meta = prepare_data_with_meta(df)
+    Xv = X.values
+    splits = list(walk_forward_splits(meta["Date"], 3, EMBARGO_DAYS))
 
     def objective(trial):
         params = dict(
@@ -316,14 +475,15 @@ def tune_and_train(df: pd.DataFrame):
             n_jobs           = -1,
         )
         aucs = []
-        for step, (tr_idx, val_idx) in enumerate(tscv.split(X_scaled)):
+        for step, (tr_idx, val_idx) in enumerate(splits):
+            fit_idx, es_idx = split_for_early_stopping(tr_idx, meta["Date"], embargo_days=EMBARGO_DAYS)
             m = LGBMClassifier(**params)
             m.fit(
-                X_scaled[tr_idx], y.iloc[tr_idx],
-                eval_set=[(X_scaled[val_idx], y.iloc[val_idx])],
+                Xv[fit_idx], y.iloc[fit_idx],
+                eval_set=[(Xv[es_idx], y.iloc[es_idx])],
                 callbacks=[early_stopping(30, verbose=False), log_evaluation(-1)],
             )
-            auc = roc_auc_score(y.iloc[val_idx], m.predict_proba(X_scaled[val_idx])[:, 1])
+            auc = roc_auc_score(y.iloc[val_idx], m.predict_proba(Xv[val_idx])[:, 1])
             aucs.append(auc)
             trial.report(np.mean(aucs), step)
             if trial.should_prune():
@@ -336,6 +496,7 @@ def tune_and_train(df: pd.DataFrame):
 
     best_params = {**DEFAULT_LGBM_PARAMS, **study.best_params}
     print(f"\nBest AUC: {study.best_value:.4f}")
+    os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(best_params, f"{MODEL_DIR}/best_params.pkl")
     train_full(df, params=best_params)
 

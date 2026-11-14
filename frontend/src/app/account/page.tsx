@@ -125,7 +125,7 @@ export default function AccountPage() {
         {!isPro ? (
           <div className="px-5 py-4">
             <p className="text-sm text-slate-400 mb-3">
-              無料プランは上位10件のシグナルのみ。Pro にアップグレードすると全件・ICT分析・メールアラートが使えます。
+              無料プランは上位3件のシグナルのみ。Pro にアップグレードすると全件・ICT分析・メールアラートが使えます。
             </p>
             <Link
               href="/billing"

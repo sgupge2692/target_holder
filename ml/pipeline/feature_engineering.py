@@ -10,7 +10,7 @@ v3 改善:
 
 v4 改善:
   - ニュースセンチメント特徴量（Yahoo Finance Japan RSS）
-    環境変数 NEWS_SENTIMENT=true でオン（デフォルト: オフ）
+    ※ v6 で時点整合の蓄積方式に変更（news_store.py / collect_news.py）。NEWS_SENTIMENT 環境変数は廃止
 
 v5 改善:
   - ギャップアップ/ダウン（前日終値との開き）
@@ -29,7 +29,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-USE_NEWS_SENTIMENT = os.getenv("NEWS_SENTIMENT", "false").lower() == "true"
 
 
 # ────────────────────────────────────────────────────────────────
@@ -267,6 +266,9 @@ def calc_features_single(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[df["next_return"] >  dynamic_threshold, "label"] =  1
     df.loc[df["next_return"] < -dynamic_threshold, "label"] = -1
 
+    # 超過リターンラベル（add_excess_labels）で使う銘柄ごとのしきい値
+    df["label_threshold"] = dynamic_threshold
+
     return df
 
 
@@ -324,47 +326,58 @@ def add_relative_features(df_all: pd.DataFrame) -> pd.DataFrame:
 
 
 # ────────────────────────────────────────────────────────────────
+# 市場超過リターンラベル
+# ────────────────────────────────────────────────────────────────
+
+# 超過リターンの絶対値が「その銘柄のしきい値 × この比率」未満なら中立（学習から除外）。
+# 超過リターンは生のリターンより振れ幅が小さいため、従来ラベルと同じしきい値は使わない。
+EXCESS_NEUTRAL_RATIO = 0.3
+
+
+def add_excess_labels(df_all: pd.DataFrame, neutral_ratio: float = EXCESS_NEUTRAL_RATIO) -> pd.DataFrame:
+    """
+    目的変数を「市場平均に対する超過リターン」に変える。
+
+    翌日の相場全体の動き（地合い）は銘柄選びでは予測できないノイズなので、
+    各日の全銘柄の翌日リターン中央値を引いて、銘柄ごとの相対的な強弱だけを予測させる。
+
+    追加する列:
+      market_return : その日の全銘柄の翌日リターン中央値
+      excess_return : next_return - market_return
+      label_excess  : +1 市場を明確に上回る / -1 明確に下回る / 0 中立（学習対象外）
+    """
+    df_all = df_all.copy()
+    df_all["market_return"] = df_all.groupby("Date")["next_return"].transform("median")
+    df_all["excess_return"] = df_all["next_return"] - df_all["market_return"]
+
+    band = df_all["label_threshold"] * neutral_ratio
+    df_all["label_excess"] = 0
+    df_all.loc[df_all["excess_return"] >  band, "label_excess"] =  1
+    df_all.loc[df_all["excess_return"] < -band, "label_excess"] = -1
+    return df_all
+
+
+# ────────────────────────────────────────────────────────────────
 # エントリポイント
 # ────────────────────────────────────────────────────────────────
 
-def add_news_sentiment(df_all: pd.DataFrame) -> pd.DataFrame:
+def add_news_sentiment(df_all: pd.DataFrame, engine=None) -> pd.DataFrame:
     """
-    最新日のニュースセンチメントを各銘柄に付与する。
-    USE_NEWS_SENTIMENT=true の時のみ実行。ネットワーク不可時は 0 埋め。
+    ニュース特徴量を付ける（時点整合）。
+
+    蓄積した記事（news_articles）から、各 (Code, Date) の予測時刻までに見られた記事だけで作る。
+    以前は「今日のニュース」を過去すべての日付に付けていたが、それはリークなので廃止した。
+    記事が無い・観測期間が足りない日は 0 埋めで、news_covered=0（train.py が学習への採用を判断する）。
     """
-    if not USE_NEWS_SENTIMENT:
-        df_all["news_sentiment"]     = 0.0
-        df_all["news_pos_count"]     = 0
-        df_all["news_neg_count"]     = 0
-        df_all["news_article_count"] = 0
-        return df_all
+    from news_store import NEWS_FEATURE_COLS, COVERED_COL, build_point_in_time_features, load_articles
 
-    try:
-        from news_sentiment import build_news_features_df
+    articles = load_articles(engine) if engine is not None else None
+    feats = build_point_in_time_features(df_all[["Code", "Date"]], articles)
+    for col in NEWS_FEATURE_COLS + [COVERED_COL]:
+        df_all[col] = feats[col].values
 
-        # listed_stocks から社名を取得（あれば）
-        codes = df_all["Code"].unique().tolist()
-        code_name_map = {}
-        if "CompanyName" in df_all.columns:
-            code_name_map = df_all.groupby("Code")["CompanyName"].first().to_dict()
-
-        codes_names = [(c, code_name_map.get(c, c)) for c in codes]
-        print(f"Fetching news sentiment for {len(codes_names)} stocks...")
-        news_df = build_news_features_df(codes_names, sleep_sec=0.3)
-        df_all = df_all.merge(news_df, on="Code", how="left")
-
-        # 欠損は 0 埋め
-        for col in ["news_sentiment", "news_pos_count", "news_neg_count", "news_article_count"]:
-            df_all[col] = df_all[col].fillna(0)
-
-        print(f"News sentiment attached. avg={df_all['news_sentiment'].mean():.4f}")
-    except Exception as e:
-        print(f"News sentiment failed ({e}), filling zeros.")
-        df_all["news_sentiment"]     = 0.0
-        df_all["news_pos_count"]     = 0
-        df_all["news_neg_count"]     = 0
-        df_all["news_article_count"] = 0
-
+    covered = df_all.loc[df_all[COVERED_COL] == 1, "Date"].nunique()
+    print(f"News features: 記事 {0 if articles is None else len(articles)} 件 / 観測できた日 {covered} 日")
     return df_all
 
 
@@ -392,7 +405,10 @@ def main():
     df_all = add_relative_features(df_all)
 
     # 3. ニュースセンチメント特徴量（NEWS_SENTIMENT=true の時のみ）
-    df_all = add_news_sentiment(df_all)
+    df_all = add_news_sentiment(df_all, engine)
+
+    # 4. 市場超過リターンのラベル（全銘柄の翌日リターン中央値を引く）
+    df_all = add_excess_labels(df_all)
 
     df_all = df_all.dropna(subset=["label"])
     df_all.to_sql("features", engine, if_exists="replace", index=False)
@@ -404,6 +420,10 @@ def main():
     print(f"Label distribution: UP={dist.get(1,0)} ({dist.get(1,0)/total:.1%}), "
           f"DOWN={dist.get(-1,0)} ({dist.get(-1,0)/total:.1%}), "
           f"NEUTRAL={dist.get(0,0)} ({dist.get(0,0)/total:.1%})")
+    dist_x = df_all["label_excess"].value_counts().sort_index()
+    print(f"Excess label distribution: OUTPERFORM={dist_x.get(1,0)} ({dist_x.get(1,0)/total:.1%}), "
+          f"UNDERPERFORM={dist_x.get(-1,0)} ({dist_x.get(-1,0)/total:.1%}), "
+          f"NEUTRAL={dist_x.get(0,0)} ({dist_x.get(0,0)/total:.1%})")
 
 
 if __name__ == "__main__":

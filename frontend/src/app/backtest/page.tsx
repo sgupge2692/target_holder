@@ -2,10 +2,11 @@
 import { useState } from "react";
 import useSWR from "swr";
 import {
-  LineChart, Line, BarChart, Bar,
+  Line, BarChart, Bar, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine, Area, AreaChart,
 } from "recharts";
+import Link from "next/link";
 import { getBacktestChart } from "@/lib/api";
 import { TrendingUp, TrendingDown, Target, BarChart2, Zap } from "lucide-react";
 
@@ -85,7 +86,12 @@ export default function BacktestPage() {
   const overall = data?.overall ?? [];
   const upRow    = overall.find(r => r.signal === "UP");
   const downRow  = overall.find(r => r.signal === "DOWN");
-  const lastCumReturn = data?.cumulative_return?.at(-1)?.cumulative_return_pct ?? null;
+  const lastCum = data?.cumulative_return?.at(-1);
+  const lastTopCum = lastCum?.top_cumulative_return_pct ?? null;
+  const lastAllCum = lastCum?.cumulative_return_pct ?? null;
+  const meta = data?.meta;
+  const topK = meta?.top_k ?? 3;
+  const shortHistory = meta != null && meta.days > 0 && meta.days < 60;
 
   const monthly = data?.monthly ?? [];
   const upTrend = monthly.length >= 2
@@ -97,8 +103,15 @@ export default function BacktestPage() {
       {/* ヘッダー */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-xl font-black tracking-tight text-white uppercase">Backtest Results</h1>
-          <p className="text-xs text-slate-500 mt-0.5 tracking-wide">過去シグナルの予測精度・累積リターン分析</p>
+          <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-white uppercase">Backtest Results</h1>
+          <p className="text-xs text-slate-500 mt-0.5 tracking-wide">
+            市場平均との比較で見た、過去シグナルの的中率・累積超過リターン
+          </p>
+          {meta && meta.days > 0 && (
+            <p className="text-[11px] text-slate-500 mt-1 font-mono">
+              実績期間 {meta.first_date} 〜 {meta.last_date}（{meta.days}営業日）
+            </p>
+          )}
         </div>
         {/* 期間セレクター */}
         <div className="flex gap-1 bg-[#0c1424] border border-slate-700/60 p-1 rounded">
@@ -118,6 +131,12 @@ export default function BacktestPage() {
         </div>
       </div>
 
+      {shortHistory && (
+        <div className="rounded border border-amber-500/40 bg-amber-50 dark:bg-amber-900/10 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed">
+          実績期間がまだ短い（{meta?.days}営業日）ため、的中率や累積リターンは偶然の影響を大きく受けます。参考値としてご覧ください。
+        </div>
+      )}
+
       {/* KPI カード */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard
@@ -136,17 +155,17 @@ export default function BacktestPage() {
           icon={<TrendingDown className="w-10 h-10" />}
         />
         <KpiCard
-          label="UP 平均リターン"
-          value={upRow ? `${upRow.avg_return_pct >= 0 ? "+" : ""}${upRow.avg_return_pct}%` : "—"}
-          sub="翌日騰落"
-          up={upRow ? upRow.avg_return_pct >= 0 : undefined}
+          label="UP 平均超過リターン"
+          value={upRow?.avg_excess_pct != null ? `${upRow.avg_excess_pct >= 0 ? "+" : ""}${upRow.avg_excess_pct}%` : "—"}
+          sub="1件あたり・市場平均比"
+          up={upRow?.avg_excess_pct != null ? upRow.avg_excess_pct >= 0 : undefined}
           icon={<Zap className="w-10 h-10" />}
         />
         <KpiCard
-          label="累積リターン"
-          value={lastCumReturn != null ? `${lastCumReturn >= 0 ? "+" : ""}${lastCumReturn.toFixed(1)}%` : "—"}
-          sub={`過去 ${months}M UP追従`}
-          up={lastCumReturn != null ? lastCumReturn >= 0 : undefined}
+          label={`累積超過リターン（上位${topK}件）`}
+          value={lastTopCum != null ? `${lastTopCum >= 0 ? "+" : ""}${lastTopCum.toFixed(1)}%` : "—"}
+          sub={`過去 ${months}M・毎日の上位${topK}件に均等投資した場合`}
+          up={lastTopCum != null ? lastTopCum >= 0 : undefined}
           icon={<BarChart2 className="w-10 h-10" />}
         />
       </div>
@@ -187,10 +206,10 @@ export default function BacktestPage() {
             <div className="rounded border border-slate-700/60 bg-[#0c1424] p-5">
               <h2 className="text-[10px] font-black tracking-widest uppercase text-slate-400 mb-4 flex items-center gap-2">
                 <TrendingUp className="w-3.5 h-3.5 text-teal-500" />
-                累積リターン（UPシグナル追従）
+                累積超過リターン（市場平均比）
               </h2>
               <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={data.cumulative_return} margin={{ top: 4, right: 8, left: -12, bottom: 4 }}>
+                <ComposedChart data={data.cumulative_return} margin={{ top: 4, right: 8, left: -12, bottom: 4 }}>
                   <defs>
                     <linearGradient id="retGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%"  stopColor="#0d9488" stopOpacity={0.3} />
@@ -205,21 +224,31 @@ export default function BacktestPage() {
                   />
                   <YAxis tickFormatter={v => `${v.toFixed(0)}%`} tick={{ fontSize: 9, fill: "#475569" }} />
                   <Tooltip
-                    formatter={(v: number) => [`${v.toFixed(2)}%`, "累積リターン"]}
+                    formatter={(v: number, name: string) => [`${v.toFixed(2)}%`, name]}
                     labelFormatter={l => `日付: ${l}`}
                     contentStyle={{ background: "#0c1424", border: "1px solid #334155", borderRadius: "4px", fontSize: "12px", color: "#cbd5e1" }}
                   />
                   <ReferenceLine y={0} stroke="#334155" />
+                  <Legend wrapperStyle={{ fontSize: "11px", color: "#64748b" }} />
                   <Area
                     type="monotone"
-                    dataKey="cumulative_return_pct"
-                    name="累積リターン"
+                    dataKey="top_cumulative_return_pct"
+                    name={`上位${topK}件`}
                     stroke="#0d9488"
                     fill="url(#retGrad)"
                     dot={false}
                     strokeWidth={2}
                   />
-                </AreaChart>
+                  <Line
+                    type="monotone"
+                    dataKey="cumulative_return_pct"
+                    name="UP全件の平均"
+                    stroke="#64748b"
+                    dot={false}
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                  />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           )}
@@ -235,8 +264,26 @@ export default function BacktestPage() {
         </div>
       )}
 
-      <p className="text-[10px] text-slate-700 text-center">
-        ※ 過去の精度は将来の利益を保証するものではありません。投資は自己責任で行ってください。
+      {/* 導線: 無料でも上位件数は見られる。全件は Pro */}
+      <div className="rounded border border-teal-600/30 bg-teal-50 dark:bg-teal-900/10 p-5 text-center space-y-2">
+        <p className="text-sm text-slate-700 dark:text-slate-300">
+          毎日の上位{topK}件は無料で見られます。全シグナル・ICT分析・メールアラートはPro。
+        </p>
+        <div className="flex justify-center gap-3 flex-wrap">
+          <Link href="/auth" className="rounded bg-teal-600 px-5 py-2 text-xs font-black tracking-widest uppercase text-white hover:bg-teal-500">
+            無料で始める
+          </Link>
+          <Link href="/billing" className="rounded border border-slate-400 dark:border-slate-600 px-5 py-2 text-xs font-black tracking-widest uppercase text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800">
+            料金を見る
+          </Link>
+        </div>
+      </div>
+
+      <p className="text-[10px] text-slate-500 text-center leading-relaxed">
+        ※ 累積超過リターンは、各日のUPシグナル（または確度上位の銘柄）に均等に投資し、市場平均（全銘柄の騰落率の中央値）との差を日次で積み上げた値です。
+        手数料・税金・約定の可否・売買代金の制約は考慮していません。
+        ※ 的中は「翌営業日の騰落率が市場全体（全銘柄の中央値）を上回ったか／下回ったか」で判定しています。
+        過去の精度は将来の利益を保証するものではありません。投資は自己責任で行ってください。
       </p>
     </div>
   );

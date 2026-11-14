@@ -5,17 +5,18 @@ import { BottomNav } from "@/components/BottomNav";
 import { ToastProvider } from "@/components/Toast";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { PwaInstallBanner } from "@/components/PwaInstallBanner";
+import { SiteFooter } from "@/components/SiteFooter";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://kabumi.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "かぶみ | AIが毎日、翌日の上昇・下落銘柄を予測",
+    default: "かぶみ | AIが毎日、翌日に市場を上回る・下回る銘柄を予測",
     template: "%s | かぶみ",
   },
   description:
-    "LightGBM × XGBoost アンサンブルAIが毎朝、翌日上昇の可能性が高い銘柄をシグナル配信。46種のテクニカル指標 × セクター相対分析 × ニュースセンチメントで高精度予測。無料プランあり。",
+    "LightGBM × XGBoost アンサンブルAIが毎朝、翌日に市場平均を上回る可能性が高い銘柄をシグナル配信。46種のテクニカル指標 × セクター相対分析 × ニュースセンチメントで高精度予測。無料プランあり。",
   keywords: ["株価予測", "AI投資", "テクニカル分析", "株シグナル", "機械学習", "LightGBM", "日本株"],
   authors: [{ name: "かぶみ" }],
   openGraph: {
@@ -23,9 +24,9 @@ export const metadata: Metadata = {
     locale: "ja_JP",
     url: SITE_URL,
     siteName: "かぶみ",
-    title: "かぶみ | AIが毎日、翌日の上昇・下落銘柄を予測",
+    title: "かぶみ | AIが毎日、翌日に市場を上回る・下回る銘柄を予測",
     description:
-      "毎朝AIが翌日上昇銘柄をシグナル配信。46種指標 × セクター分析 × ニュースセンチメント。無料で始められます。",
+      "毎朝AIが翌日に市場を上回る銘柄をシグナル配信。46種指標 × セクター分析 × ニュースセンチメント。無料で始められます。",
     images: [
       {
         url: "/og-image.png",
@@ -37,8 +38,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "かぶみ | AIが毎日、翌日の上昇・下落銘柄を予測",
-    description: "毎朝AIが翌日上昇銘柄をシグナル配信。無料で始められます。",
+    title: "かぶみ | AIが毎日、翌日に市場を上回る・下回る銘柄を予測",
+    description: "毎朝AIが翌日に市場を上回る銘柄をシグナル配信。無料で始められます。",
     images: ["/og-image.png"],
   },
   robots: {
@@ -79,7 +80,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ServiceWorkerRegistration />
         <ToastProvider>
           <Navbar />
-          <main className="max-w-6xl mx-auto px-4 py-6 has-bottom-nav md:pb-8">{children}</main>
+          <main className="max-w-6xl mx-auto px-4 py-6 md:pb-8">{children}</main>
+          <SiteFooter />
           <BottomNav />
           <PwaInstallBanner />
         </ToastProvider>
